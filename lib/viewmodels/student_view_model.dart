@@ -1,173 +1,247 @@
-import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:student_assistant/feature/auth/auth_service.dart';
-import 'package:student_assistant/models/exceptionError.dart';
-import 'package:student_assistant/models/repository.dart';
-import 'package:student_assistant/models/student_model.dart';
-import 'package:student_assistant/routes/routemanager.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/application_model.dart';
+import '../models/repository.dart';
+import '../routes/route_manager.dart';
+import '../feature/auth/auth_service.dart';
 
 class StudentViewModel extends ChangeNotifier {
-  final Repository _repository = Repository();
+  final Repository _repository;
   final AuthService _authService = AuthService();
-  Student _student = Student(
-    studentEmail: "",
-    firstName: "",
-    surname: "",
-    yearOfStudy: DateTime.now(),
-    firstModule: "",
-    secondModule: "",
-    photoUrl: "",
-    status: "",
-  );
+
+  StudentViewModel(this._repository) {
+    loadStudentData();
+  }
+
+  // Profile
+  String firstName = '';
+  String surname = '';
+  String studentEmail = '';
+
+  // Current application
+  ApplicationModel? _application;
+  ApplicationModel? get application => _application;
+
   // Form fields
-  File? _supportingDocument;
+  int? _yearOfStudy;
+  String? _firstModule;
+  String? _secondModule;
+
+  // File upload — bytes based (web compatible)
+  Uint8List? _docBytes;
+  String? _docFileName;
+
   bool _eligibilityConfirmed = false;
+
+  // Status
   bool _isLoading = false;
   String? _errorMessage;
-  String? _successMessage;
 
-  // Getters for form fields
-  DateTime? get yearOfStudy => _student.yearOfStudy;
-  String? get module1 => _student.firstModule;
-  String? get module2 => _student.secondModule;
-  File? get supportingDocument => _student.photoUrl as File?;
+  // Getters
+  int? get yearOfStudy => _yearOfStudy;
+  String? get module1 => _firstModule;
+  String? get module2 => _secondModule;
+  Uint8List? get docBytes => _docBytes;
+  String? get docFileName => _docFileName;
   bool get eligibilityConfirmed => _eligibilityConfirmed;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
-  String? get successMessage => _successMessage;
 
-  // Setters for form fields
-  void setYearOfStudy(DateTime? year) {
-    _student = _student.copyWith(yearOfStudy: year);
+  // Setters
+  void setYearOfStudy(int? year) {
+    _yearOfStudy = year;
     notifyListeners();
   }
 
   void setModule1(String? module) {
-    _student = _student.copyWith(firstModule: module);
+    _firstModule = module;
     notifyListeners();
   }
 
   void setModule2(String? module) {
-    _student = _student.copyWith(secondModule: module);
-    notifyListeners();
-  }
-
-  void setSupportingDocument(File? file) {
-    _student = _student.copyWith(photoUrl: file?.path);
-    _supportingDocument = file;
+    _secondModule = module;
     notifyListeners();
   }
 
   void setEligibilityConfirmed(bool confirmed) {
     _eligibilityConfirmed = confirmed;
-    _student = _student.copyWith(
-      status: confirmed ? "Eligible" : "Not Eligible",
-    );
     notifyListeners();
   }
 
-  // Validation logic
+  // Validation
   String? validateYearOfStudy(int? year) {
-    if (year == null) {
-      return 'Please select your year of study.';
-    }
+    if (year == null) return 'Please select your year of study.';
     return null;
   }
 
   String? validateModule1(String? module) {
-    if (module == null || module.isEmpty) {
-      return 'Please select your first module.';
-    }
+    if (module == null || module.isEmpty)
+      return 'Please select your first course.';
     return null;
   }
 
   String? validateEligibility(bool? confirmed) {
-    if (confirmed == null || !confirmed) {
-      return 'You must confirm eligibility.';
-    }
+    if (confirmed == null || !confirmed) return 'You must confirm eligibility.';
     return null;
   }
 
-  // Method to handle document upload to Supabase Storage
-  Future<String?> _uploadDocument() async {
-    if (_supportingDocument == null) return null;
+  // Pre-fill form for edit mode
+  void loadFromApplication(ApplicationModel app) {
+    _yearOfStudy = app.yearOfStudy;
+    _firstModule = app.firstModule;
+    _secondModule = app.secondModule;
+    _eligibilityConfirmed = true;
+    _docBytes = null;
+    _docFileName = null;
+    _errorMessage = null;
+    notifyListeners();
+  }
 
-    try {
-      return _repository.uploadStudentDocs(
-        _student.studentEmail!,
-        _repository.pickStudentDocs() as File,
-      );
-    } catch (e) {
-      Exceptionerror.snackBarError('Document upload failed: ${e.toString()}');
+  // Reset form
+  void resetForm() {
+    _yearOfStudy = null;
+    _firstModule = null;
+    _secondModule = null;
+    _docBytes = null;
+    _docFileName = null;
+    _eligibilityConfirmed = false;
+    _errorMessage = null;
+    notifyListeners();
+  }
+
+  // Pick document from device (web-compatible — uses bytes)
+  Future<void> pickDocument() async {
+    final result = await _repository.pickStudentDocs();
+    if (result != null) {
+      _docBytes = result['bytes'] as Uint8List;
+      _docFileName = result['name'] as String;
       notifyListeners();
-      return null;
     }
   }
 
-  // Method to submit the application
+  // Load student data — profile name comes from learner row (set at registration)
+  Future<void> loadStudentData() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) {
+        _isLoading = false;
+        notifyListeners();
+        return;
+      }
+
+      studentEmail = user.email ?? '';
+
+      // Load name from profile (exists even before application submitted)
+      final profile = await _repository.fetchStudentProfile();
+      if (profile != null) {
+        firstName = profile['First Name']?.toString() ?? '';
+        surname = profile['Surname']?.toString() ?? '';
+      }
+
+      // Load application (only set if firstmodule is filled)
+      final app = await _repository.fetchMyApplication();
+      _application = app;
+    } catch (e) {
+      _errorMessage = 'Failed to load data: $e';
+      debugPrint('loadStudentData error: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // CREATE — submit new application
   Future<bool> submitApplication() async {
     _isLoading = true;
     _errorMessage = null;
-    _successMessage = null;
     notifyListeners();
+
+    if (_yearOfStudy == null ||
+        _firstModule == null ||
+        !_eligibilityConfirmed) {
+      _errorMessage =
+          'Please fill in all required fields and confirm eligibility.';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+
     try {
-      // Basic validation before submission
-      if (_student.yearOfStudy == null ||
-          _student.firstModule == null ||
-          !_eligibilityConfirmed) {
-        _errorMessage =
-            'Please fill in all required fields and confirm eligibility.';
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) {
+        _errorMessage = 'User not authenticated.';
         _isLoading = false;
         notifyListeners();
         return false;
       }
-      // Check if the user has already submitted an application
-      //this will give an error,check columns and database before - KING
-      final existingApplications = await _repository.getStudent(_student);
 
-      if (existingApplications?.studentEmail != null) {
+      // Check for existing application
+      if (await _repository.studentHasApplication(user.id)) {
         _errorMessage = 'You have already submitted an application.';
         _isLoading = false;
         notifyListeners();
         return false;
       }
 
-      //Upload document via Repository if one was picked
-      if (_supportingDocument != null) {
-        _student.photoUrl = await _repository.uploadStudentDocs(
-          _student.studentEmail!,
-          _repository.pickStudentDocs() as File,
+      // Upload document if picked
+      String? photoUrl;
+      if (_docBytes != null && _docFileName != null) {
+        photoUrl = await _repository.uploadStudentDocs(
+          user.id,
+          _docBytes!,
+          _docFileName!,
         );
-      }
-      if (_student.photoUrl == null) {
-        _isLoading = false;
-        notifyListeners();
-        return false;
+        if (photoUrl == null) {
+          _errorMessage =
+              _repository.lastError ??
+              'Document upload failed. Please try again.';
+          _isLoading = false;
+          notifyListeners();
+          return false;
+        }
       }
 
-      //Create via Repository
-      final success = await _repository.createStudent(_student);
-      if (success != null) {
-        return true;
-      }
-      return false;
-    } catch (e) {
-      Exceptionerror.alertDialogError(
-        'An unexpected error occurred: $e.toString()',
+      final success = await _repository.createApplication(
+        userId: user.id,
+        firstName: firstName,
+        surname: surname,
+        studentEmail: studentEmail,
+        yearOfStudy: _yearOfStudy!,
+        firstModule: _firstModule!,
+        secondModule: _secondModule,
+        photoUrl: photoUrl,
       );
+
+      if (success) {
+        await loadStudentData();
+      } else {
+        _errorMessage =
+            _repository.lastError ?? 'Submission failed. Please try again.';
+      }
+
+      _isLoading = false;
+      notifyListeners();
+      return success;
+    } catch (e) {
+      _errorMessage = 'An unexpected error occurred: $e';
+      debugPrint('submitApplication error: $e');
       _isLoading = false;
       notifyListeners();
       return false;
     }
   }
 
-  //UPDATE: Edit existing (pending) application
+  // UPDATE — edit pending application
   Future<bool> updateApplication(
-    String applicationId, {
+    String userId, {
     int? yearOfStudy,
-    String? module1,
-    String? module2,
+    String? firstModule,
+    String? secondModule,
     bool? eligibilityConfirmed,
   }) async {
     _isLoading = true;
@@ -175,56 +249,71 @@ class StudentViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-
-      //uplaod new document via Repository
-      if (_supportingDocument != null && userId != null) {
-        _student.photoUrl = await _repository.uploadStudentDocs(
+      String? photoUrl;
+      if (_docBytes != null && _docFileName != null) {
+        photoUrl = await _repository.uploadStudentDocs(
           userId,
-          _supportingDocument!,
+          _docBytes!,
+          _docFileName!,
         );
       }
 
-      //Update via Repository
-      final success = await _repository.updateStudent(_student);
+      final success = await _repository.updateApplication(
+        userId: userId,
+        yearOfStudy: yearOfStudy,
+        firstModule: firstModule,
+        secondModule: secondModule,
+        photoUrl: photoUrl,
+      );
+
+      if (success) {
+        await loadStudentData();
+      } else {
+        _errorMessage = 'Update failed. Please try again.';
+      }
+
+      _isLoading = false;
       notifyListeners();
       return success;
     } catch (e) {
-      Exceptionerror.alertDialogError(
-        'An unexpected error occurred: $e.toString()',
-      );
+      _errorMessage = 'An unexpected error occurred: $e';
+      debugPrint('updateApplication error: $e');
       _isLoading = false;
       notifyListeners();
       return false;
     }
   }
 
-  //logout
+  // DELETE — remove application
+  Future<bool> deleteApplication(String userId) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final success = await _repository.deleteApplication(userId);
+      if (success) {
+        _application = null;
+      } else {
+        _errorMessage = 'Delete failed. Please try again.';
+      }
+      _isLoading = false;
+      notifyListeners();
+      return success;
+    } catch (e) {
+      _errorMessage = 'An unexpected error occurred: $e';
+      debugPrint('deleteApplication error: $e');
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // Logout
   Future<void> logout(BuildContext context) async {
     await _authService.signOut();
     if (context.mounted) {
       Navigator.pushReplacementNamed(context, RouteManager.login);
-    }
-  }
-
-  //Reset form fields(call after successful submit)
-  void resetForm() {
-    _supportingDocument = null;
-    _eligibilityConfirmed = false;
-    _errorMessage = null;
-    notifyListeners();
-  }
-
-  Future<void> pickDocument() async {
-    final fileUrl = await _repository.uploadStudentDocs(
-      _student.studentEmail!,
-      _repository.pickStudentDocs() as File,
-    );
-
-    if (fileUrl != null) {
-      _student.photoUrl = fileUrl;
-      _supportingDocument = fileUrl as File?;
-      notifyListeners();
     }
   }
 }

@@ -1,180 +1,174 @@
 import 'package:flutter/material.dart';
-import 'package:student_assistant/models/exceptionError.dart';
-import 'package:student_assistant/models/repository.dart';
-import 'package:student_assistant/models/student_model.dart';
-import 'package:student_assistant/models/application_model.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/application_model.dart';
+import '../routes/route_manager.dart';
+import '../feature/auth/auth_service.dart';
 
 class AdminViewModel extends ChangeNotifier {
-  final Repository _repository = Repository();
-  final Student _student = Student(
-    studentEmail: "",
-    firstName: "",
-    surname: "",
-    firstModule: "",
-    secondModule: "",
-    status: "",
-    yearOfStudy: DateTime.now(),
-  );
-  // ─── State ────────────────────────────────────────────────────────────────
+  final SupabaseClient _supabase;
+  final AuthService _authService = AuthService();
+
+  AdminViewModel(this._supabase);
 
   List<ApplicationModel> _applications = [];
-  List<ApplicationModel> _filteredApplications = [];
-
+  List<ApplicationModel> _filtered = [];
   bool _isLoading = false;
   String? _errorMessage;
   String? _successMessage;
-
-  // Filter state: 'all', 'pending', 'approved', 'rejected'
   String _statusFilter = 'all';
 
-  // ─── Getters ──────────────────────────────────────────────────────────────
-
-  List<ApplicationModel> get applications => _filteredApplications;
+  List<ApplicationModel> get applications => _filtered;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   String? get successMessage => _successMessage;
   String get statusFilter => _statusFilter;
 
-  // Convenience counts for the dashboard
   int get totalCount => _applications.length;
   int get pendingCount =>
-      _applications.where((a) => a.status == 'pending').length;
+      _applications.where((a) => a.applicationStatus == 'pending').length;
   int get approvedCount =>
-      _applications.where((a) => a.status == 'approved').length;
+      _applications.where((a) => a.applicationStatus == 'approved').length;
   int get rejectedCount =>
-      _applications.where((a) => a.status == 'rejected').length;
+      _applications.where((a) => a.applicationStatus == 'rejected').length;
 
-  // ─── Helpers ──────────────────────────────────────────────────────────────
-  void _setLoading(bool value) {
-    _isLoading = value;
-    notifyListeners();
-  }
-
-  void _setSuccess(String? message) {
-    _successMessage = message;
-    _errorMessage = null;
-    notifyListeners();
-  }
-
-  void clearMessages() {
-    _errorMessage = null;
-    _successMessage = null;
-    notifyListeners();
-  }
-
-  /// [_filteredApplications].
   void _applyFilter() {
-    _filteredApplications = _statusFilter == 'all'
+    _filtered = _statusFilter == 'all'
         ? List.from(_applications)
-        : _applications.where((a) => a.status == _statusFilter).toList();
+        : _applications
+              .where((a) => a.applicationStatus == _statusFilter)
+              .toList();
     notifyListeners();
   }
 
-  // ─── Filter ───────────────────────────────────────────────────────────────
-
-  /// Change the active status filter and refresh the visible list.
   void setStatusFilter(String filter) {
-    _statusFilter = filter.toLowerCase();
+    _statusFilter = filter;
     _applyFilter();
   }
 
-  // ─── READ ─────────────────────────────────────────────────────────────────
-
-  /// Fetch all student applications from Supabase, ordered newest first.
+  // READ — fetch all student applications
   Future<void> fetchAllApplications() async {
-    _setLoading(true);
+    _isLoading = true;
     _errorMessage = null;
+    notifyListeners();
 
     try {
-      final response = await _repository.getStudents();
+      final response = await _supabase
+          .from('learner')
+          .select()
+          .order('created_at', ascending: false);
+
       _applications = (response as List)
           .map((e) => ApplicationModel.fromJson(e))
+          .where(
+            (app) =>
+                app.firstModule != null ||
+                app.secondModule != null ||
+                app.applicationStatus != null ||
+                app.photo != null,
+          )
           .toList();
       _applyFilter();
+    } on PostgrestException catch (e) {
+      _errorMessage = 'Failed to load applications: ${e.message}';
     } catch (e) {
-      Exceptionerror.snackBarError(
-        'Failed to load applications: ${e.toString()}',
-      );
+      _errorMessage = 'An unexpected error occurred: $e';
     } finally {
-      _setLoading(false);
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
-  // ─── UPDATE ───────────────────────────────────────────────────────────────
-
-  /// Update the status of an application to newStatus.
-  /// newStatus must be one of: 'pending', 'approved', 'rejected'.
-  Future<bool> updateApplicationStatus(
-    String applicationId,
-    String newStatus,
-  ) async {
-    assert(
-      ['pending', 'approved', 'rejected'].contains(newStatus),
-      'Invalid status value: $newStatus',
-    );
-    _student.status = newStatus; // Update the student's status before saving
-    _setLoading(true);
+  // UPDATE — approve or reject
+  Future<bool> updateApplicationStatus(String userId, String newStatus) async {
+    _isLoading = true;
+    notifyListeners();
 
     try {
-      await _repository.updateStudent(_student);
-      // Update locally so the UI reflects the change without a full reload.
-      final index = _applications.indexWhere((a) => a.id == applicationId);
+      await _supabase
+          .from('learner') // Fixed: was 'Learners'
+          .update({'application_status': newStatus})
+          .eq('user_id', userId);
+
+      final index = _applications.indexWhere((a) => a.userId == userId);
       if (index != -1) {
-        _applications[index] = _applications[index].copyWith(status: newStatus);
+        _applications[index] = _applications[index].copyWith(
+          applicationStatus: newStatus,
+        );
         _applyFilter();
       }
 
-      _setSuccess(
-        'Application ${newStatus == 'approved'
-            ? 'approved'
-            : newStatus == 'rejected'
-            ? 'rejected'
-            : 'updated'} successfully.',
-      );
+      _successMessage =
+          'Application ${newStatus == 'approved' ? 'approved' : 'rejected'}.';
+      _errorMessage = null;
+      notifyListeners();
       return true;
+    } on PostgrestException catch (e) {
+      _errorMessage = 'Failed to update: ${e.message}';
+      notifyListeners();
+      return false;
     } catch (e) {
-      Exceptionerror.snackBarError(
-        'Failed to update application: ${e.toString()}',
-      );
+      _errorMessage = 'Unexpected error: $e';
+      notifyListeners();
       return false;
     } finally {
-      _setLoading(false);
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
-  Future<bool> approveApplication(String applicationId) =>
-      updateApplicationStatus(applicationId, 'approved');
+  Future<bool> approveApplication(String userId) =>
+      updateApplicationStatus(userId, 'approved');
 
-  Future<bool> rejectApplication(String applicationId) =>
-      updateApplicationStatus(applicationId, 'rejected');
+  Future<bool> rejectApplication(String userId) =>
+      updateApplicationStatus(userId, 'rejected');
 
-  // ─── DELETE
-
-  Future<bool> deleteApplication(String applicationId) async {
-    _setLoading(true);
+  // DELETE — clear application fields
+  Future<bool> deleteApplication(String userId) async {
+    _isLoading = true;
+    notifyListeners();
 
     try {
-      bool success = await _repository.deleteStudent(_student);
-      if (success) {
-        _applications.removeWhere((a) => a.id == applicationId);
-        _applyFilter();
+      await _supabase
+          .from('learner')
+          .update({
+            // Fixed: was 'Learners'
+            'yearOfStudy': null,
+            'firstmodule': null,
+            'secondmodule': null,
+            'photo': null,
+            'application_status': null,
+          })
+          .eq('user_id', userId);
 
-        _setSuccess('Application removed successfully.');
-        return true;
-      }
+      _applications.removeWhere((a) => a.userId == userId);
+      _applyFilter();
+      _successMessage = 'Application removed.';
+      _errorMessage = null;
+      notifyListeners();
+      return true;
+    } on PostgrestException catch (e) {
+      _errorMessage = 'Failed to delete: ${e.message}';
+      notifyListeners();
       return false;
     } catch (e) {
-      Exceptionerror.snackBarError(
-        'Failed to delete application: ${e.toString()}',
-      );
+      _errorMessage = 'Unexpected error: $e';
+      notifyListeners();
       return false;
     } finally {
-      _setLoading(false);
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
-  /// Shows a confirmation AlertDialog] before performing a destructive action.
-  /// Returns `true` if the user confirmed, `false` otherwise.
+  // Logout
+  Future<void> logout(BuildContext context) async {
+    await _authService.signOut();
+    if (context.mounted) {
+      Navigator.pushReplacementNamed(context, RouteManager.login);
+    }
+  }
+
+  // Confirmation dialog
   Future<bool> showConfirmationDialog(
     BuildContext context, {
     required String title,

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
-import 'dart:io';
-
-import 'package:student_assistant/viewmodels/student_view_model.dart'; // Updated import
+import 'package:student_assistant/models/application_model.dart';
+import 'package:student_assistant/viewmodels/student_view_model.dart';
+import 'package:student_assistant/routes/route_manager.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ApplicationFormScreen extends StatefulWidget {
-  const ApplicationFormScreen({super.key});
+  final ApplicationModel? applicationToEdit;
+  const ApplicationFormScreen({super.key, this.applicationToEdit});
 
   @override
   State<ApplicationFormScreen> createState() => _ApplicationFormScreenState();
@@ -14,20 +15,103 @@ class ApplicationFormScreen extends StatefulWidget {
 
 class _ApplicationFormScreenState extends State<ApplicationFormScreen> {
   final _formKey = GlobalKey<FormState>();
+  bool get _isEditMode => widget.applicationToEdit != null;
 
-  final List<int> _yearsOfStudy = [1, 2, 3];
-  final Map<int, List<String>> _modulesByYear = {
-    1: ['Introduction to Programming', 'Database Fundamentals'],
-    2: ['Object-Oriented Design', 'Web Development Basics'],
-    3: ['Advanced Algorithms', 'Mobile Application Development'],
-  };
+  final List<String> _courses = [
+    'IT 1st Year',
+    'IT 2nd Year',
+    'Computer Literacy',
+    'IT Extended Programme (ECP)',
+    'Higher Certificate in IT',
+    'Open Lab',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isEditMode) {
+        context.read<StudentViewModel>().loadFromApplication(
+          widget.applicationToEdit!,
+        );
+      } else {
+        context.read<StudentViewModel>().resetForm();
+      }
+    });
+  }
+
+  Future<void> _submit(StudentViewModel vm) async {
+    if (!_formKey.currentState!.validate()) return;
+
+    bool success;
+    if (_isEditMode) {
+      final userId =
+          widget.applicationToEdit?.userId ??
+          Supabase.instance.client.auth.currentUser?.id ??
+          '';
+      success = await vm.updateApplication(
+        userId,
+        yearOfStudy: vm.yearOfStudy,
+        firstModule: vm.module1,
+        secondModule: vm.module2,
+        eligibilityConfirmed: vm.eligibilityConfirmed,
+      );
+    } else {
+      success = await vm.submitApplication();
+    }
+
+    if (!mounted) return;
+
+    if (success) {
+      if (_isEditMode) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Application updated successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context, true);
+      } else {
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: const Text('Success'),
+            content: const Text('Application submitted successfully!'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+        if (!mounted) return;
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          RouteManager.studHome,
+          (route) => false,
+        );
+      }
+    } else if (vm.errorMessage != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(vm.errorMessage!), backgroundColor: Colors.red),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Student Assistant Application')),
+      appBar: AppBar(
+        title: Text(
+          _isEditMode ? 'Edit Application' : 'Apply for Student Assistant',
+        ),
+        backgroundColor: Colors.indigo,
+        foregroundColor: Colors.white,
+      ),
       body: Consumer<StudentViewModel>(
-        builder: (context, viewModel, child) {
+        builder: (context, vm, child) {
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
             child: Form(
@@ -36,230 +120,262 @@ class _ApplicationFormScreenState extends State<ApplicationFormScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Card(
-                    margin: const EdgeInsets.only(bottom: 16.0),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Personal Information',
-                            style: Theme.of(context).textTheme.headlineSmall,
-                          ),
-                          const SizedBox(height: 16.0),
-                          DropdownButtonFormField<DateTime>(
-                            value: viewModel.yearOfStudy,
-                            decoration: const InputDecoration(
-                              labelText: 'Year of Study',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: _yearsOfStudy.map((year) {
-                              return DropdownMenuItem<DateTime>(
-                                value: DateTime(DateTime.now().year - year),
-                                child: Text('Year $year'),
-                              );
-                            }).toList(),
-                            onChanged: (value) {
-                              viewModel.setYearOfStudy(value);
-                              viewModel.setModule1(null);
-                              viewModel.setModule2(null);
-                            },
-                            validator: (value) {
-                              if (value == null) {
-                                return 'Please select a year of study';
-                              }
-                              return null;
-                            },
-                          ),
-                        ],
+                  // Year of Study
+                  _SectionCard(
+                    title: 'Personal Information',
+                    child: DropdownButtonFormField<int>(
+                      initialValue: vm.yearOfStudy,
+                      decoration: const InputDecoration(
+                        labelText: 'Current Year of Study',
+                        border: OutlineInputBorder(),
                       ),
+                      items: [1, 2, 3]
+                          .map(
+                            (y) => DropdownMenuItem(
+                              value: y,
+                              child: Text('Year $y'),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: vm.setYearOfStudy,
+                      validator: vm.validateYearOfStudy,
                     ),
                   ),
 
-                  Card(
-                    margin: const EdgeInsets.only(bottom: 16.0),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'First Module Selection',
-                            style: Theme.of(context).textTheme.headlineSmall,
-                          ),
-                          const SizedBox(height: 16.0),
-                          DropdownButtonFormField<String>(
-                            value: viewModel.module1,
-                            decoration: const InputDecoration(
-                              labelText: 'Module 1',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: viewModel.yearOfStudy != null
-                                ? _modulesByYear[viewModel.yearOfStudy]!.map((
-                                    module,
-                                  ) {
-                                    return DropdownMenuItem<String>(
-                                      value: module,
-                                      child: Text(module),
-                                    );
-                                  }).toList()
-                                : [],
-                            onChanged: viewModel.setModule1,
-                            validator: viewModel.validateModule1,
-                          ),
-                        ],
+                  // First Course
+                  _SectionCard(
+                    title: 'First Course Selection',
+                    subtitle: 'Select the course you wish to assist with.',
+                    child: DropdownButtonFormField<String>(
+                      initialValue: vm.module1,
+                      decoration: const InputDecoration(
+                        labelText: 'Course 1',
+                        border: OutlineInputBorder(),
                       ),
+                      items: _courses
+                          .map(
+                            (c) => DropdownMenuItem(value: c, child: Text(c)),
+                          )
+                          .toList(),
+                      onChanged: vm.setModule1,
+                      validator: vm.validateModule1,
                     ),
                   ),
 
+                  // Second Course (Optional)
                   Card(
-                    margin: const EdgeInsets.only(bottom: 16.0),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: ExpansionTile(
-                        title: const Text('Second Module Selection (Optional)'),
-                        children: [
-                          DropdownButtonFormField<String>(
-                            value: viewModel.module2,
+                    color: Colors.blue.shade50,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    margin: const EdgeInsets.only(bottom: 16),
+                    child: ExpansionTile(
+                      initiallyExpanded:
+                          _isEditMode &&
+                          widget.applicationToEdit!.secondModule != null,
+                      title: const Text('Second Course Selection (Optional)'),
+                      subtitle: const Text(
+                        'Maximum of 2 courses per application.',
+                        style: TextStyle(fontSize: 11),
+                      ),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                          child: DropdownButtonFormField<String?>(
+                            initialValue: vm.module2,
                             decoration: const InputDecoration(
-                              labelText: 'Module 2',
+                              labelText: 'Course 2',
                               border: OutlineInputBorder(),
                             ),
-                            items: viewModel.yearOfStudy != null
-                                ? _modulesByYear[viewModel.yearOfStudy]!.map((
-                                    module,
-                                  ) {
-                                    return DropdownMenuItem<String>(
-                                      value: module,
-                                      child: Text(module),
-                                    );
-                                  }).toList()
-                                : [],
-                            onChanged: viewModel.setModule2,
+                            items: [
+                              const DropdownMenuItem<String?>(
+                                value: null,
+                                child: Text('None'),
+                              ),
+                              ..._courses
+                                  .where((c) => c != vm.module1)
+                                  .map(
+                                    (c) => DropdownMenuItem<String?>(
+                                      value: c,
+                                      child: Text(c),
+                                    ),
+                                  ),
+                            ],
+                            onChanged: vm.setModule2,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
 
-                  Card(
-                    margin: const EdgeInsets.only(bottom: 16.0),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Eligibility & Documentation',
-                            style: Theme.of(context).textTheme.headlineSmall,
-                          ),
-                          const SizedBox(height: 16.0),
-                          FormField<bool>(
-                            initialValue: viewModel.eligibilityConfirmed,
-                            validator: (value) =>
-                                viewModel.validateEligibility(value),
-                            builder: (field) {
-                              return CheckboxListTile(
+                  // Eligibility & Document
+                  _SectionCard(
+                    title: 'Eligibility & Documentation',
+                    subtitle:
+                        'You must not be currently appointed to any position at CUT.',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        FormField<bool>(
+                          initialValue: vm.eligibilityConfirmed,
+                          validator: vm.validateEligibility,
+                          builder: (field) => Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              CheckboxListTile(
                                 value: field.value ?? false,
+                                title: const Text(
+                                  'I confirm I meet all minimum requirements.',
+                                  style: TextStyle(fontSize: 13),
+                                ),
                                 onChanged: (val) {
                                   field.didChange(val);
-                                  viewModel.setEligibilityConfirmed(val!);
+                                  vm.setEligibilityConfirmed(val ?? false);
                                 },
                                 controlAffinity:
                                     ListTileControlAffinity.leading,
-                                subtitle: field.errorText != null
-                                    ? Text(
-                                        field.errorText!,
-                                        style: TextStyle(color: Colors.red),
-                                      )
-                                    : null,
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 16.0),
-                          ElevatedButton.icon(
-                            onPressed: () async {
-                              FilePickerResult? result =
-                                  await FilePicker.pickFiles(
-                                    type: FileType.custom,
-                                    allowedExtensions: ['pdf'],
-                                  );
-                              if (result != null &&
-                                  result.files.single.path != null) {
-                                viewModel.setSupportingDocument(
-                                  File(result.files.single.path!),
-                                );
-                              }
-                            },
-                            icon: const Icon(Icons.upload_file),
-                            label: Text(
-                              viewModel.supportingDocument != null
-                                  ? 'Document Selected: ${viewModel.supportingDocument!.path.split('/').last}'
-                                  : 'Upload Supporting Document (PDF)',
-                            ),
-                          ),
-                          if (viewModel.supportingDocument == null &&
-                              viewModel.eligibilityConfirmed)
-                            const Padding(
-                              padding: EdgeInsets.only(top: 8.0),
-                              child: Text(
-                                'Please upload a supporting document.',
-                                style: TextStyle(
-                                  color: Colors.red,
-                                  fontSize: 12,
-                                ),
+                                contentPadding: EdgeInsets.zero,
                               ),
+                              if (field.errorText != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(left: 16),
+                                  child: Text(
+                                    field.errorText!,
+                                    style: const TextStyle(
+                                      color: Colors.red,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Existing doc notice in edit mode
+                        if (_isEditMode &&
+                            widget.applicationToEdit?.photo != null &&
+                            vm.docFileName == null)
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.green.shade200),
                             ),
-                        ],
-                      ),
+                            child: const Row(
+                              children: [
+                                Icon(
+                                  Icons.check_circle,
+                                  color: Colors.green,
+                                  size: 18,
+                                ),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'Existing document on file. Upload below to replace it.',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                        ElevatedButton.icon(
+                          onPressed: () => vm.pickDocument(),
+                          icon: const Icon(Icons.upload_file),
+                          label: Text(
+                            vm.docFileName != null
+                                ? 'Selected: ${vm.docFileName}'
+                                : _isEditMode
+                                ? 'Replace Supporting Document (PDF)'
+                                : 'Upload Supporting Document (PDF)',
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Upload one PDF: CV, certified ID, Grade 12 certificate, academic record, proof of registration, and cover letter.',
+                          style: TextStyle(fontSize: 11, color: Colors.black45),
+                        ),
+                      ],
                     ),
                   ),
 
-                  if (viewModel.errorMessage != null)
+                  if (vm.errorMessage != null)
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 16.0),
+                      padding: const EdgeInsets.only(bottom: 16),
                       child: Text(
-                        viewModel.errorMessage!,
+                        vm.errorMessage!,
                         style: const TextStyle(color: Colors.red),
                       ),
                     ),
 
                   Center(
                     child: ElevatedButton(
-                      onPressed: viewModel.isLoading
-                          ? null
-                          : () async {
-                              if (_formKey.currentState!.validate()) {
-                                bool success = await viewModel
-                                    .submitApplication();
-                                if (success) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'Application submitted successfully!',
-                                      ),
-                                    ),
-                                  );
-                                } else if (viewModel.errorMessage != null) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(viewModel.errorMessage!),
-                                    ),
-                                  );
-                                }
-                              }
-                            },
-                      child: viewModel.isLoading
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text('Submit Application'),
+                      onPressed: vm.isLoading ? null : () => _submit(vm),
+                      child: vm.isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : Text(
+                              _isEditMode
+                                  ? 'Save Changes'
+                                  : 'Submit Application',
+                            ),
                     ),
                   ),
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class _SectionCard extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+  final Widget child;
+
+  const _SectionCard({required this.title, this.subtitle, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: Colors.blue.shade50,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(color: Colors.indigo),
+            ),
+            if (subtitle != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                subtitle!,
+                style: const TextStyle(fontSize: 12, color: Colors.black54),
+              ),
+            ],
+            const SizedBox(height: 16),
+            child,
+          ],
+        ),
       ),
     );
   }

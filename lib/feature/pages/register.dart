@@ -3,7 +3,7 @@ import 'package:student_assistant/feature/auth/auth_service.dart';
 import 'package:student_assistant/models/admin_model.dart';
 import 'package:student_assistant/models/exceptionError.dart';
 import 'package:student_assistant/models/student_model.dart';
-import 'package:student_assistant/routes/routemanager.dart';
+import 'package:student_assistant/routes/route_manager.dart';
 
 class Register extends StatefulWidget {
   const Register({super.key});
@@ -193,3 +193,4 @@ class _RegisterState extends State<Register> {
     );
   }
 }
+

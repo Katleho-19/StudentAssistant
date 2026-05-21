@@ -1,66 +1,124 @@
 class ApplicationModel {
   String? id;
-  String? studentId;
+  String? userId;
+  String? firstName;
+  String? surname;
+  String? studentEmail;
   int? yearOfStudy;
-  String? module1;
-  String? module2;
+  String? firstModule;
+  String? secondModule;
   bool? eligibilityConfirmed;
-  String? supportingDocumentUrl;
-  String? status;
-  DateTime? submissionDate;
+  String? photo;
+  String? applicationStatus;
+  String? createdAt;
 
   ApplicationModel({
     this.id,
-    this.studentId,
+    this.userId,
+    this.firstName,
+    this.surname,
+    this.studentEmail,
     this.yearOfStudy,
-    this.module1,
-    this.module2,
+    this.firstModule,
+    this.secondModule,
     this.eligibilityConfirmed,
-    this.supportingDocumentUrl,
-    this.status,
-    this.submissionDate,
+    this.photo,
+    this.applicationStatus,
+    this.createdAt,
   });
+
+  static String? _readString(Map<String, dynamic> json, List<String> keys) {
+    for (final key in keys) {
+      final value = json[key];
+      if (value != null) return value.toString();
+    }
+    return null;
+  }
 
   factory ApplicationModel.fromJson(Map<String, dynamic> json) {
     return ApplicationModel(
-      id: json['id'],
-      studentId: json['student_id'],
-      yearOfStudy: json['year_of_study'],
-      module1: json['module_1'],
-      module2: json['module_2'],
-      eligibilityConfirmed: json['eligibility_confirmed'],
-      supportingDocumentUrl: json['supporting_document_url'],
-      status: json['status'],
-      submissionDate: json['submission_date'] != null
-          ? DateTime.parse(json['submission_date'])
-          : null,
+      id: _readString(json, ['id']),
+      userId: _readString(json, ['user_id', 'userId']),
+      firstName: _readString(json, ['First Name', 'FirstName', 'firstName']),
+      surname: _readString(json, ['Surname', 'surname']),
+      studentEmail: _readString(json, [
+        'studentEmail',
+        'studentemail',
+        'email',
+        'student_email',
+      ]),
+      yearOfStudy: json['yearOfStudy'] is int
+          ? json['yearOfStudy'] as int
+          : int.tryParse(
+              _readString(json, ['yearOfStudy', 'year_of_study']) ?? '',
+            ),
+      firstModule: _readString(json, [
+        'firstmodule',
+        'firstModule',
+        'First Module',
+      ]),
+      secondModule: _readString(json, [
+        'secondmodule',
+        'secondModule',
+        'Second Module',
+      ]),
+      eligibilityConfirmed:
+          json['eligibility_confirmed'] == true ||
+          _readString(json, ['eligibility_confirmed'])?.toLowerCase() == 'true',
+      photo: _readString(json, ['photo', 'photo_url', 'document_url']),
+      applicationStatus: _readString(json, [
+        'application_status',
+        'status',
+        'applicationStatus',
+      ]),
+      createdAt: _readString(json, ['created_at', 'createdAt']),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'student_id': studentId,
-      'year_of_study': yearOfStudy,
-      'module_1': module1,
-      'module_2': module2,
+      'user_id': userId,
+      'First Name': firstName,
+      'Surname': surname,
+      'studentEmail': studentEmail,
+      'yearOfStudy': yearOfStudy,
+      'firstmodule': firstModule,
+      'secondmodule': secondModule,
       'eligibility_confirmed': eligibilityConfirmed,
-      'supporting_document_url': supportingDocumentUrl,
-      'status': status,
-      'submission_date': submissionDate?.toString(),
+      'photo': photo,
+      'application_status': applicationStatus,
+      'created_at': createdAt,
     };
   }
 
-  ApplicationModel copyWith({String? id, String? studentId, String? status}) {
+  ApplicationModel copyWith({
+    String? id,
+    String? userId,
+    String? firstName,
+    String? surname,
+    String? studentEmail,
+    int? yearOfStudy,
+    String? firstModule,
+    String? secondModule,
+    bool? eligibilityConfirmed,
+    String? photo,
+    String? applicationStatus,
+    String? createdAt,
+  }) {
     return ApplicationModel(
       id: id ?? this.id,
-      studentId: studentId ?? this.studentId,
-      yearOfStudy: yearOfStudy ?? yearOfStudy,
-      module1: module1 ?? module1,
-      module2: module2 ?? module2,
-      eligibilityConfirmed: eligibilityConfirmed ?? eligibilityConfirmed,
-      supportingDocumentUrl: supportingDocumentUrl ?? supportingDocumentUrl,
-      status: status ?? this.status,
+      userId: userId ?? this.userId,
+      firstName: firstName ?? this.firstName,
+      surname: surname ?? this.surname,
+      studentEmail: studentEmail ?? this.studentEmail,
+      yearOfStudy: yearOfStudy ?? this.yearOfStudy,
+      firstModule: firstModule ?? this.firstModule,
+      secondModule: secondModule ?? this.secondModule,
+      eligibilityConfirmed: eligibilityConfirmed ?? this.eligibilityConfirmed,
+      photo: photo ?? this.photo,
+      applicationStatus: applicationStatus ?? this.applicationStatus,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 }

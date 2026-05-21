@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:student_assistant/feature/auth/auth_service.dart';
-import 'package:student_assistant/routes/routemanager.dart';
+import 'package:student_assistant/routes/route_manager.dart';
 
 class Studview extends StatefulWidget {
   const Studview({super.key});

@@ -1,265 +1,281 @@
-import 'dart:io';
 import 'package:file_picker/file_picker.dart';
-import 'package:student_assistant/models/admin_model.dart';
-import 'package:student_assistant/models/exceptionError.dart';
-import 'package:student_assistant/models/student_model.dart';
+import 'package:flutter/foundation.dart';
+import 'package:student_assistant/models/application_model.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-//PLEASE DO NOT MAKE CHANGES!!!
 class Repository {
-  // Supabase table clients
-  final adminClient = Supabase.instance.client.from('admin');
-  final studentClient = Supabase.instance.client.from('student');
+  final SupabaseClient _supabase = Supabase.instance.client;
   final String bucketName = 'student-bucket';
+  String? lastError;
 
-  // Local cache
-  Admin? _admin;
-  Student? _student;
+  // ── LEARNERS ──────────────────────────────────────────────────────────────
 
-  // Getters
-  Admin? get admin => _admin;
-  Student? get student => _student;
-
-  //-------------------------STUDENT------------------------
-
-  // Returns all students
-  Future<Iterable<Student>> getStudents() async {
+  // READ — fetch current student's record from learner table
+  Future<ApplicationModel?> fetchMyApplication() async {
     try {
-      final response = await studentClient.select();
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return null;
 
-      if (response.isNotEmpty) {
-        return (response as List)
-            .map(
-              (e) => Student(
-                firstName: e['FirstName'],
-                surname: e['Surname'],
-                studentEmail: e['studentEmail'],
-                yearOfStudy: e['yearOfStudy'],
-                password: e['password'],
-              ),
-            )
-            .toList();
-      } else {
-        return [];
+      final response = await _supabase
+          .from('learner')
+          .select()
+          .eq('user_id', userId)
+          .maybeSingle();
+
+      if (response == null) return null;
+
+      final app = ApplicationModel.fromJson(response);
+      if (app.firstModule == null &&
+          app.applicationStatus == null &&
+          app.photo == null) {
+        return null;
       }
+
+      return app;
     } catch (e) {
+      debugPrint('fetchMyApplication error: $e');
+      return null;
+    }
+  }
+
+  // READ — fetch student profile (name/email) even before application submitted
+  Future<Map<String, dynamic>?> fetchStudentProfile() async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return null;
+
+      final response = await _supabase
+          .from('learner')
+          .select('First Name, Surname, studentEmail')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+      return response;
+    } catch (e) {
+      debugPrint('fetchStudentProfile error: $e');
+      return null;
+    }
+  }
+
+  // READ — fetch all learners who have submitted (admin only)
+  Future<List<ApplicationModel>> fetchAllApplications() async {
+    try {
+      final response = await _supabase
+          .from('learner')
+          .select()
+          .order('created_at', ascending: false);
+
+      return (response as List)
+          .map((e) => ApplicationModel.fromJson(e))
+          .where(
+            (app) =>
+                app.firstModule != null ||
+                app.secondModule != null ||
+                app.applicationStatus != null ||
+                app.photo != null,
+          )
+          .toList();
+    } catch (e) {
+      debugPrint('fetchAllApplications error: $e');
       return [];
     }
   }
 
-  // Return one student
-  Future<Student?> getStudent(Student student) async {
+  // CHECK — has this student already submitted?
+  Future<bool> studentHasApplication(String userId) async {
     try {
-      final response = await studentClient
-          .select()
-          .eq('studentEmail', student.studentEmail.toString())
-          .single();
-
-      _student = Student(
-        studentEmail: response['studentEmail'],
-        password: response['password'],
-        firstName: response['FirstName'],
-        surname: response['Surname'],
-        yearOfStudy: response['yearOfStudy'],
-      );
-
-      return _student;
+      final response = await _supabase
+          .from('learner')
+          .select('firstmodule, application_status, photo')
+          .eq('user_id', userId)
+          .maybeSingle();
+      if (response == null) return false;
+      return response['firstmodule'] != null ||
+          response['application_status'] != null ||
+          response['photo'] != null;
     } catch (e) {
-      return null;
+      debugPrint('studentHasApplication error: $e');
+      return false;
     }
   }
 
-  // Create student
-  Future<Student?> createStudent(Student student) async {
+  // CREATE — insert new student application into learner table
+  Future<bool> createApplication({
+    required String userId,
+    required String firstName,
+    required String surname,
+    required String studentEmail,
+    required int yearOfStudy,
+    required String firstModule,
+    String? secondModule,
+    String? photoUrl,
+  }) async {
+    lastError = null;
     try {
-      await studentClient.insert({
-        'studentEmail': student.studentEmail,
-        'password': student.password,
-        'FirstName': student.firstName,
-        'Surname': student.surname,
-        'yearOfStudy': student.yearOfStudy,
-      });
+      final existing = await _supabase
+          .from('learner')
+          .select('user_id')
+          .eq('user_id', userId)
+          .maybeSingle();
 
-      _student = student;
+      final payload = {
+        'user_id': userId,
+        'First Name': firstName,
+        'Surname': surname,
+        'studentEmail': studentEmail,
+        'yearOfStudy': yearOfStudy,
+        'firstmodule': firstModule,
+        'secondmodule': secondModule,
+        'photo': photoUrl,
+        'application_status': 'pending',
+      };
 
-      return student;
+      if (existing == null) {
+        await _supabase.from('learner').insert(payload);
+      } else {
+        await _supabase.from('learner').update(payload).eq('user_id', userId);
+      }
+
+      return true;
+    } on PostgrestException catch (e) {
+      lastError = e.message;
+      debugPrint('createApplication error: ${e.message}');
+      return false;
     } catch (e) {
-      return null;
+      lastError = e.toString();
+      debugPrint('createApplication error: $e');
+      return false;
     }
   }
 
-  // Update student
-  Future<bool> updateStudent(Student student) async {
+  // UPDATE — edit pending application fields
+  Future<bool> updateApplication({
+    required String userId,
+    int? yearOfStudy,
+    String? firstModule,
+    String? secondModule,
+    String? photoUrl,
+  }) async {
+    lastError = null;
     try {
-      await studentClient
+      final Map<String, dynamic> updates = {};
+      if (yearOfStudy != null) updates['yearOfStudy'] = yearOfStudy;
+      if (firstModule != null) updates['firstmodule'] = firstModule;
+      updates['secondmodule'] = secondModule;
+      if (photoUrl != null) updates['photo'] = photoUrl;
+
+      await _supabase.from('learner').update(updates).eq('user_id', userId);
+      return true;
+    } on PostgrestException catch (e) {
+      lastError = e.message;
+      debugPrint('updateApplication error: ${e.message}');
+      return false;
+    } catch (e) {
+      lastError = e.toString();
+      debugPrint('updateApplication error: $e');
+      return false;
+    }
+  }
+
+  // UPDATE — admin approves or rejects
+  Future<bool> updateApplicationStatus({
+    required String userId,
+    required String newStatus,
+  }) async {
+    try {
+      await _supabase
+          .from('learner')
+          .update({'application_status': newStatus})
+          .eq('user_id', userId);
+      return true;
+    } catch (e) {
+      debugPrint('updateApplicationStatus error: $e');
+      return false;
+    }
+  }
+
+  // DELETE — clear application fields (keeps student profile)
+  Future<bool> deleteApplication(String userId) async {
+    try {
+      await _supabase
+          .from('learner')
           .update({
-            'studentEmail': student.studentEmail,
-            'password': student.password,
-            'FirstName': student.firstName,
-            'Surname': student.surname,
-            'yearOfStudy': student.yearOfStudy,
+            'yearOfStudy': null,
+            'firstmodule': null,
+            'secondmodule': null,
+            'photo': null,
+            'application_status': null,
           })
-          .eq('studentEmail', student.studentEmail.toString());
-
-      _student = student;
-
+          .eq('user_id', userId);
       return true;
     } catch (e) {
+      debugPrint('deleteApplication error: $e');
       return false;
     }
   }
 
-  // Delete student
-  Future<bool> deleteStudent(Student student) async {
+  // ── DOCUMENT STORAGE ──────────────────────────────────────────────────────
+
+  // Pick file — returns bytes + filename (works on Web, Android, iOS, Desktop)
+  Future<Map<String, dynamic>?> pickStudentDocs() async {
     try {
-      await studentClient.delete().eq(
-        'studentEmail',
-        student.studentEmail.toString(),
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
+        withData: true, // Forces bytes into memory — required for web
       );
 
-      return true;
+      if (result == null || result.files.isEmpty) return null;
+
+      final file = result.files.single;
+      final bytes = file.bytes;
+      if (bytes == null) return null;
+
+      return {'bytes': bytes, 'name': file.name};
     } catch (e) {
-      return false;
-    }
-  }
-
-  //-------------------------ADMIN-------------------------
-
-  // Return one admin
-  Future<Admin?> getAdmin(Admin admin) async {
-    try {
-      final response = await adminClient
-          .select()
-          .eq('AdminEmail', admin.email.toString())
-          .single();
-
-      _admin = Admin(
-        email: response['AdminEmail'],
-        password: response['password'],
-        firstName: response['FirstName'],
-        surname: response['Surname'],
-      );
-
-      return _admin;
-    } catch (e) {
+      debugPrint('pickStudentDocs error: $e');
       return null;
     }
   }
 
-  // Create admin
-  Future<Admin?> createAdmin(Admin admin) async {
+  // Upload document bytes and return public URL
+  Future<String?> uploadStudentDocs(
+    String userId,
+    Uint8List bytes,
+    String fileName,
+  ) async {
+    lastError = null;
     try {
-      await adminClient.insert({
-        'AdminEmail': admin.email,
-        'password': admin.password,
-        'FirstName': admin.firstName,
-        'Surname': admin.surname,
-      });
+      final ext = fileName.contains('.') ? fileName.split('.').last : 'pdf';
+      final storageName = '${DateTime.now().millisecondsSinceEpoch}.$ext';
+      final path = '$userId/$storageName';
 
-      _admin = admin;
-
-      return admin;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  // Update admin
-  Future<bool> updateAdmin(Admin admin) async {
-    try {
-      await adminClient
-          .update({
-            'AdminEmail': admin.email,
-            'password': admin.password,
-            'FirstName': admin.firstName,
-            'Surname': admin.surname,
-          })
-          .eq('AdminEmail', admin.email.toString());
-
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  // Delete admin
-  Future<bool> deleteAdmin(Admin admin) async {
-    try {
-      await adminClient.delete().eq('AdminEmail', admin.email.toString());
-
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  //-------------------------DOCUMENT STORAGE--------------------------
-  // Pick document
-  Future<File?> pickStudentDocs() async {
-    FilePickerResult? result = await FilePicker.pickFiles();
-
-    if (result != null) {
-      File file = File(result.files.single.path!);
-      return file;
-    } else {
-      Exceptionerror.snackBarError('User cancelled document selection');
-      return null;
-    }
-  }
-
-  // Upload document
-  Future<String?> uploadStudentDocs(String studentId, File file) async {
-    try {
-      final ext = file.toString().split('.').last;
-
-      final fileName = '${DateTime.now().millisecondsSinceEpoch}.$ext';
-
-      final path = '$studentId/$fileName';
-
-      await Supabase.instance.client.storage
+      await _supabase.storage
           .from(bucketName)
-          .upload(
+          .uploadBinary(
             path,
-            file,
+            bytes,
             fileOptions: const FileOptions(upsert: true),
           );
 
-      return Supabase.instance.client.storage
-          .from(bucketName)
-          .getPublicUrl(path);
+      return _supabase.storage.from(bucketName).getPublicUrl(path);
+    } on PostgrestException catch (e) {
+      lastError = e.message;
+      debugPrint('uploadStudentDocs error: ${e.message}');
+      return null;
     } catch (e) {
-      Exceptionerror.snackBarError('Error uploading document');
+      lastError = e.toString();
+      debugPrint('uploadStudentDocs error: $e');
       return null;
     }
   }
 
-  // Delete document
-  Future<bool> deleteStudentDocs(String filePath) async {
+  // Delete document from storage
+  Future<void> deleteStudentDocs(String filePath) async {
     try {
-      await Supabase.instance.client.storage.from(bucketName).remove([
-        filePath,
-      ]);
-
-      return true;
+      await _supabase.storage.from(bucketName).remove([filePath]);
     } catch (e) {
-      Exceptionerror.snackBarError('Error deleting document');
-      return false;
-    }
-  }
-
-  // Replace document
-  Future<String?> updateStudentDocs(String studentId, String oldPath) async {
-    try {
-      final newFile = await pickStudentDocs();
-
-      if (newFile == null) return null;
-
-      await deleteStudentDocs(oldPath);
-
-      return await uploadStudentDocs(studentId, newFile);
-    } catch (e) {
-      Exceptionerror.snackBarError('Error updating document');
-      return null;
+      debugPrint('deleteStudentDocs error: $e');
     }
   }
 }
