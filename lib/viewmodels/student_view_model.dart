@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/application_model.dart';
@@ -27,11 +26,7 @@ class StudentViewModel extends ChangeNotifier {
   int? _yearOfStudy;
   String? _firstModule;
   String? _secondModule;
-
-  // File upload — bytes based (web compatible)
-  Uint8List? _docBytes;
-  String? _docFileName;
-
+  Map<String, dynamic>? _supportingDocument;
   bool _eligibilityConfirmed = false;
 
   // Status
@@ -42,8 +37,7 @@ class StudentViewModel extends ChangeNotifier {
   int? get yearOfStudy => _yearOfStudy;
   String? get module1 => _firstModule;
   String? get module2 => _secondModule;
-  Uint8List? get docBytes => _docBytes;
-  String? get docFileName => _docFileName;
+  Map<String, dynamic>? get supportingDocument => _supportingDocument;
   bool get eligibilityConfirmed => _eligibilityConfirmed;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -64,6 +58,11 @@ class StudentViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setSupportingDocument(Map<String, dynamic>? file) {
+    _supportingDocument = file;
+    notifyListeners();
+  }
+
   void setEligibilityConfirmed(bool confirmed) {
     _eligibilityConfirmed = confirmed;
     notifyListeners();
@@ -76,8 +75,9 @@ class StudentViewModel extends ChangeNotifier {
   }
 
   String? validateModule1(String? module) {
-    if (module == null || module.isEmpty)
+    if (module == null || module.isEmpty) {
       return 'Please select your first course.';
+    }
     return null;
   }
 
@@ -92,8 +92,7 @@ class StudentViewModel extends ChangeNotifier {
     _firstModule = app.firstModule;
     _secondModule = app.secondModule;
     _eligibilityConfirmed = true;
-    _docBytes = null;
-    _docFileName = null;
+    _supportingDocument = null;
     _errorMessage = null;
     notifyListeners();
   }
@@ -103,24 +102,22 @@ class StudentViewModel extends ChangeNotifier {
     _yearOfStudy = null;
     _firstModule = null;
     _secondModule = null;
-    _docBytes = null;
-    _docFileName = null;
+    _supportingDocument = null;
     _eligibilityConfirmed = false;
     _errorMessage = null;
     notifyListeners();
   }
 
-  // Pick document from device (web-compatible — uses bytes)
+  // Pick document from device
   Future<void> pickDocument() async {
-    final result = await _repository.pickStudentDocs();
-    if (result != null) {
-      _docBytes = result['bytes'] as Uint8List;
-      _docFileName = result['name'] as String;
+    final file = await _repository.pickStudentDocs();
+    if (file != null) {
+      _supportingDocument = file;
       notifyListeners();
     }
   }
 
-  // Load student data — profile name comes from learner row (set at registration)
+  // Load student data from Learners table
   Future<void> loadStudentData() async {
     _isLoading = true;
     _errorMessage = null;
@@ -136,19 +133,28 @@ class StudentViewModel extends ChangeNotifier {
 
       studentEmail = user.email ?? '';
 
-      // Load name from profile (exists even before application submitted)
-      final profile = await _repository.fetchStudentProfile();
-      if (profile != null) {
-        firstName = profile['First Name']?.toString() ?? '';
-        surname = profile['Surname']?.toString() ?? '';
-      }
-
-      // Load application (only set if firstmodule is filled)
       final app = await _repository.fetchMyApplication();
       _application = app;
+
+      // Always read the name from the learner row - it is inserted at
+      // registration so it exists even before an application is submitted.
+      if (app != null) {
+        firstName = app.firstName ?? '';
+        surname = app.surname ?? '';
+      } else {
+        // Fallback: fetch profile row directly (name columns only)
+        final profile = await Supabase.instance.client
+            .from('learner')
+            .select('"First Name", "Surname"')
+            .eq('user_id', user.id)
+            .maybeSingle();
+        if (profile != null) {
+          firstName = profile['First Name']?.toString() ?? '';
+          surname = profile['Surname']?.toString() ?? '';
+        }
+      }
     } catch (e) {
       _errorMessage = 'Failed to load data: $e';
-      debugPrint('loadStudentData error: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -188,21 +194,22 @@ class StudentViewModel extends ChangeNotifier {
         return false;
       }
 
-      // Upload document if picked
+      // Upload document if picked (optional — failure warns but does not block)
       String? photoUrl;
-      if (_docBytes != null && _docFileName != null) {
-        photoUrl = await _repository.uploadStudentDocs(
-          user.id,
-          _docBytes!,
-          _docFileName!,
-        );
-        if (photoUrl == null) {
+      if (_supportingDocument != null) {
+        try {
+          photoUrl = await _repository.uploadStudentDocs(
+            user.id,
+            _supportingDocument!['bytes'],
+            _supportingDocument!['name'],
+          );
+        } catch (uploadError) {
+          // Surface the real Supabase error. Common causes: bucket 'student-bucket'
+          // does not exist, RLS policy blocks the upload, or bucket is not public.
           _errorMessage =
-              _repository.lastError ??
-              'Document upload failed. Please try again.';
-          _isLoading = false;
+              'Document upload failed: $uploadError\nYour application will still be submitted without the document.';
           notifyListeners();
-          return false;
+          // photoUrl stays null — submission continues without the document.
         }
       }
 
@@ -219,9 +226,6 @@ class StudentViewModel extends ChangeNotifier {
 
       if (success) {
         await loadStudentData();
-      } else {
-        _errorMessage =
-            _repository.lastError ?? 'Submission failed. Please try again.';
       }
 
       _isLoading = false;
@@ -229,7 +233,6 @@ class StudentViewModel extends ChangeNotifier {
       return success;
     } catch (e) {
       _errorMessage = 'An unexpected error occurred: $e';
-      debugPrint('submitApplication error: $e');
       _isLoading = false;
       notifyListeners();
       return false;
@@ -250,11 +253,11 @@ class StudentViewModel extends ChangeNotifier {
 
     try {
       String? photoUrl;
-      if (_docBytes != null && _docFileName != null) {
+      if (_supportingDocument != null) {
         photoUrl = await _repository.uploadStudentDocs(
           userId,
-          _docBytes!,
-          _docFileName!,
+          _supportingDocument!['bytes'],
+          _supportingDocument!['name'],
         );
       }
 
@@ -277,14 +280,13 @@ class StudentViewModel extends ChangeNotifier {
       return success;
     } catch (e) {
       _errorMessage = 'An unexpected error occurred: $e';
-      debugPrint('updateApplication error: $e');
       _isLoading = false;
       notifyListeners();
       return false;
     }
   }
 
-  // DELETE — remove application
+  //Delete- remove application
   Future<bool> deleteApplication(String userId) async {
     _isLoading = true;
     _errorMessage = null;
@@ -302,7 +304,6 @@ class StudentViewModel extends ChangeNotifier {
       return success;
     } catch (e) {
       _errorMessage = 'An unexpected error occurred: $e';
-      debugPrint('deleteApplication error: $e');
       _isLoading = false;
       notifyListeners();
       return false;

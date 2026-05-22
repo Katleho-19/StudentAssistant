@@ -175,9 +175,7 @@ class _AdminViewState extends State<AdminView> {
                               return _ApplicationCard(
                                 app: app,
                                 onApprove: app.applicationStatus == 'pending'
-                                    ? () => vm.approveApplication(
-                                        app.userId ?? '',
-                                      )
+                                    ? () => vm.approveApplication(app.id!)
                                     : null,
                                 onReject: app.applicationStatus == 'pending'
                                     ? () => _confirmReject(context, vm, app)
@@ -210,7 +208,7 @@ Future<void> _confirmReject(
     confirmLabel: 'Reject',
     confirmColor: Colors.red,
   );
-  if (confirmed) vm.rejectApplication(app.userId ?? '');
+  if (confirmed) vm.rejectApplication(app.id!);
 }
 
 Future<void> _confirmDelete(
@@ -225,7 +223,7 @@ Future<void> _confirmDelete(
     confirmLabel: 'Remove',
     confirmColor: Colors.red,
   );
-  if (confirmed) vm.deleteApplication(app.userId ?? '');
+  if (confirmed) vm.deleteApplication(app.id!);
 }
 
 class _ApplicationCard extends StatelessWidget {
@@ -241,9 +239,8 @@ class _ApplicationCard extends StatelessWidget {
     required this.onDelete,
   });
 
-  Color _statusColor(String? status) {
-    final normalized = status?.toLowerCase() ?? 'pending';
-    switch (normalized) {
+  Color _statusColor(String status) {
+    switch (status.toLowerCase()) {
       case 'approved':
         return Colors.green;
       case 'rejected':
@@ -255,7 +252,8 @@ class _ApplicationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _statusColor(app.applicationStatus);
+    final status = app.applicationStatus ?? 'unknown';
+    final color = _statusColor(status);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -288,7 +286,7 @@ class _ApplicationCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  app.applicationStatus?.toUpperCase() ?? 'UNKNOWN',
+                  (app.applicationStatus ?? 'unknown').toUpperCase(),
                   style: TextStyle(
                     color: color,
                     fontWeight: FontWeight.bold,

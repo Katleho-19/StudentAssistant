@@ -17,6 +17,7 @@ class _ApplicationFormScreenState extends State<ApplicationFormScreen> {
   final _formKey = GlobalKey<FormState>();
   bool get _isEditMode => widget.applicationToEdit != null;
 
+  // Real courses from the 2026 vacancy notice
   final List<String> _courses = [
     'IT 1st Year',
     'IT 2nd Year',
@@ -45,10 +46,9 @@ class _ApplicationFormScreenState extends State<ApplicationFormScreen> {
 
     bool success;
     if (_isEditMode) {
-      final userId =
-          widget.applicationToEdit?.userId ??
-          Supabase.instance.client.auth.currentUser?.id ??
-          '';
+      final userId = _isEditMode
+          ? widget.applicationToEdit?.userId ?? ''
+          : Supabase.instance.client.auth.currentUser?.id ?? '';
       success = await vm.updateApplication(
         userId,
         yearOfStudy: vm.yearOfStudy,
@@ -63,30 +63,19 @@ class _ApplicationFormScreenState extends State<ApplicationFormScreen> {
     if (!mounted) return;
 
     if (success) {
-      if (_isEditMode) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Application updated successfully!'),
-            backgroundColor: Colors.green,
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _isEditMode
+                ? 'Application updated successfully!'
+                : 'Application submitted successfully!',
           ),
-        );
+          backgroundColor: Colors.green,
+        ),
+      );
+      if (_isEditMode) {
         Navigator.pop(context, true);
       } else {
-        await showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            title: const Text('Success'),
-            content: const Text('Application submitted successfully!'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
-        if (!mounted) return;
         Navigator.pushNamedAndRemoveUntil(
           context,
           RouteManager.studHome,
@@ -181,21 +170,21 @@ class _ApplicationFormScreenState extends State<ApplicationFormScreen> {
                       children: [
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                          child: DropdownButtonFormField<String?>(
+                          child: DropdownButtonFormField<String>(
                             initialValue: vm.module2,
                             decoration: const InputDecoration(
                               labelText: 'Course 2',
                               border: OutlineInputBorder(),
                             ),
                             items: [
-                              const DropdownMenuItem<String?>(
+                              const DropdownMenuItem<String>(
                                 value: null,
                                 child: Text('None'),
                               ),
                               ..._courses
                                   .where((c) => c != vm.module1)
                                   .map(
-                                    (c) => DropdownMenuItem<String?>(
+                                    (c) => DropdownMenuItem(
                                       value: c,
                                       child: Text(c),
                                     ),
@@ -255,7 +244,7 @@ class _ApplicationFormScreenState extends State<ApplicationFormScreen> {
                         // Existing doc notice in edit mode
                         if (_isEditMode &&
                             widget.applicationToEdit?.photo != null &&
-                            vm.docFileName == null)
+                            vm.supportingDocument == null)
                           Container(
                             margin: const EdgeInsets.only(bottom: 12),
                             padding: const EdgeInsets.all(12),
@@ -286,8 +275,8 @@ class _ApplicationFormScreenState extends State<ApplicationFormScreen> {
                           onPressed: () => vm.pickDocument(),
                           icon: const Icon(Icons.upload_file),
                           label: Text(
-                            vm.docFileName != null
-                                ? 'Selected: ${vm.docFileName}'
+                            vm.supportingDocument != null
+                                ? 'Selected: ${vm.supportingDocument!['name'] ?? 'document.pdf'}'
                                 : _isEditMode
                                 ? 'Replace Supporting Document (PDF)'
                                 : 'Upload Supporting Document (PDF)',

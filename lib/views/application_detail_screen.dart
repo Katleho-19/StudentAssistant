@@ -17,9 +17,8 @@ class ApplicationDetailScreen extends StatefulWidget {
 class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
   bool _isDeleting = false;
 
-  Color _statusColor(String? status) {
-    final normalized = status?.toLowerCase() ?? 'pending';
-    switch (normalized) {
+  Color _statusColor(String status) {
+    switch (status.toLowerCase()) {
       case 'approved':
         return Colors.green;
       case 'rejected':
@@ -29,9 +28,8 @@ class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
     }
   }
 
-  IconData _statusIcon(String? status) {
-    final normalized = status?.toLowerCase() ?? 'pending';
-    switch (normalized) {
+  IconData _statusIcon(String status) {
+    switch (status.toLowerCase()) {
       case 'approved':
         return Icons.check_circle;
       case 'rejected':
@@ -110,12 +108,10 @@ class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final app = widget.application;
-    final status = app.applicationStatus?.toLowerCase() ?? 'pending';
-    final statusLabel =
-        app.applicationStatus != null && app.applicationStatus!.isNotEmpty
-        ? app.applicationStatus![0].toUpperCase() +
-              app.applicationStatus!.substring(1)
-        : 'Pending';
+    final status = app.applicationStatus?.toLowerCase() ?? 'unknown';
+    final prettyStatus = status.isNotEmpty
+        ? '${status[0].toUpperCase()}${status.substring(1)}'
+        : 'Unknown';
     final isPending = status == 'pending';
 
     return Scaffold(
@@ -131,15 +127,10 @@ class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
           children: [
             // Status banner
             Card(
-              color: _statusColor(
-                app.applicationStatus,
-              ).withValues(alpha: 0.12),
+              color: _statusColor(status).withValues(alpha: 0.12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
-                side: BorderSide(
-                  color: _statusColor(app.applicationStatus),
-                  width: 1.5,
-                ),
+                side: BorderSide(color: _statusColor(status), width: 1.5),
               ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -149,8 +140,8 @@ class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
                 child: Row(
                   children: [
                     Icon(
-                      _statusIcon(app.applicationStatus),
-                      color: _statusColor(app.applicationStatus),
+                      _statusIcon(status),
+                      color: _statusColor(status),
                       size: 28,
                     ),
                     const SizedBox(width: 12),
@@ -162,11 +153,11 @@ class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
                           style: TextStyle(fontSize: 12, color: Colors.black54),
                         ),
                         Text(
-                          statusLabel,
+                          prettyStatus,
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: _statusColor(app.applicationStatus),
+                            color: _statusColor(status),
                           ),
                         ),
                       ],

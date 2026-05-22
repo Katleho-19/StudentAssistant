@@ -45,7 +45,7 @@ class AdminViewModel extends ChangeNotifier {
     _applyFilter();
   }
 
-  // READ — fetch all student applications
+  // READ — fetch all student applications from Learners
   Future<void> fetchAllApplications() async {
     _isLoading = true;
     _errorMessage = null;
@@ -55,17 +55,11 @@ class AdminViewModel extends ChangeNotifier {
       final response = await _supabase
           .from('learner')
           .select()
+          .not('firstmodule', 'is', null)
           .order('created_at', ascending: false);
 
       _applications = (response as List)
           .map((e) => ApplicationModel.fromJson(e))
-          .where(
-            (app) =>
-                app.firstModule != null ||
-                app.secondModule != null ||
-                app.applicationStatus != null ||
-                app.photo != null,
-          )
           .toList();
       _applyFilter();
     } on PostgrestException catch (e) {
@@ -78,18 +72,19 @@ class AdminViewModel extends ChangeNotifier {
     }
   }
 
-  // UPDATE — approve or reject
-  Future<bool> updateApplicationStatus(String userId, String newStatus) async {
+  // UPDATE — approve or reject (updates application_status on learner)
+  Future<bool> updateApplicationStatus(String id, String newStatus) async {
     _isLoading = true;
     notifyListeners();
 
     try {
+      final idValue = int.tryParse(id) ?? id;
       await _supabase
-          .from('learner') // Fixed: was 'Learners'
+          .from('learner')
           .update({'application_status': newStatus})
-          .eq('user_id', userId);
+          .eq('id', idValue);
 
-      final index = _applications.indexWhere((a) => a.userId == userId);
+      final index = _applications.indexWhere((a) => a.id == id);
       if (index != -1) {
         _applications[index] = _applications[index].copyWith(
           applicationStatus: newStatus,
@@ -116,31 +111,31 @@ class AdminViewModel extends ChangeNotifier {
     }
   }
 
-  Future<bool> approveApplication(String userId) =>
-      updateApplicationStatus(userId, 'approved');
+  Future<bool> approveApplication(String id) =>
+      updateApplicationStatus(id, 'approved');
 
-  Future<bool> rejectApplication(String userId) =>
-      updateApplicationStatus(userId, 'rejected');
+  Future<bool> rejectApplication(String id) =>
+      updateApplicationStatus(id, 'rejected');
 
-  // DELETE — clear application fields
-  Future<bool> deleteApplication(String userId) async {
+  // DELETE — clear application fields on learner
+  Future<bool> deleteApplication(String id) async {
     _isLoading = true;
     notifyListeners();
 
     try {
+      final idValue = int.tryParse(id) ?? id;
       await _supabase
           .from('learner')
           .update({
-            // Fixed: was 'Learners'
             'yearOfStudy': null,
             'firstmodule': null,
             'secondmodule': null,
             'photo': null,
             'application_status': null,
           })
-          .eq('user_id', userId);
+          .eq('id', idValue);
 
-      _applications.removeWhere((a) => a.userId == userId);
+      _applications.removeWhere((a) => a.id == id);
       _applyFilter();
       _successMessage = 'Application removed.';
       _errorMessage = null;
