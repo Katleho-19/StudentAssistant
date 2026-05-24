@@ -3,9 +3,11 @@ import 'package:provider/provider.dart';
 import 'package:student_assistant/models/application_model.dart';
 import 'package:student_assistant/viewmodels/admin_view_model.dart';
 
+const _kDark = Color(0xFF0F172A);
+const _kBg = Color(0xFFF1F5F9);
+
 class AdminView extends StatefulWidget {
   const AdminView({super.key});
-
   @override
   State<AdminView> createState() => _AdminViewState();
 }
@@ -22,176 +24,202 @@ class _AdminViewState extends State<AdminView> {
   @override
   Widget build(BuildContext context) {
     return Consumer<AdminViewModel>(
-      builder: (context, vm, child) {
-        return Scaffold(
-          appBar: AppBar(
-            title: const Text('Admin Dashboard'),
-            backgroundColor: Colors.deepPurple,
-            foregroundColor: Colors.white,
-            automaticallyImplyLeading: false,
-            actions: [
-              IconButton(
-                onPressed: () => vm.logout(context),
-                icon: const Icon(Icons.logout),
-              ),
-            ],
-          ),
-          body: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                //Welcome banner
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.deepPurple.shade700,
-                        Colors.deepPurple.shade400,
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      builder: (context, vm, _) => Scaffold(
+        backgroundColor: _kBg,
+        body: Column(
+          children: [
+            // Dark header
+            Container(
+              color: _kDark,
+              padding: const EdgeInsets.fromLTRB(18, 50, 18, 14),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'Admin Dashboard',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Admin Portal',
+                            style: TextStyle(
+                              color: Color(0x73FFFFFF),
+                              fontSize: 10,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          Text(
+                            'Applications',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
-                      Text(
-                        'Manage student assistant applications',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.9),
-                          fontSize: 13,
+                      GestureDetector(
+                        onTap: () => vm.logout(context),
+                        child: Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withAlpha((0.08 * 255).round()),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.logout,
+                            color: Color(0x80FFFFFF),
+                            size: 17,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 16),
-                //Messages
-                if (vm.errorMessage != null)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    margin: const EdgeInsets.only(bottom: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.red.shade200),
-                    ),
-                    child: Text(
-                      vm.errorMessage!,
-                      style: const TextStyle(color: Colors.red),
-                    ),
+                  const SizedBox(height: 14),
+                  // Stat boxes
+                  Row(
+                    children: [
+                      _StatBox(
+                        label: 'Pending',
+                        count: vm.pendingCount,
+                        textColor: const Color(0xFFFBBF24),
+                        bg: const Color(0xFF261F0A),
+                        border: const Color(0xFF4D3800),
+                      ),
+                      const SizedBox(width: 8),
+                      _StatBox(
+                        label: 'Approved',
+                        count: vm.approvedCount,
+                        textColor: const Color(0xFF34D399),
+                        bg: const Color(0xFF062015),
+                        border: const Color(0xFF0A4030),
+                      ),
+                      const SizedBox(width: 8),
+                      _StatBox(
+                        label: 'Rejected',
+                        count: vm.rejectedCount,
+                        textColor: const Color(0xFFF87171),
+                        bg: const Color(0xFF200A0A),
+                        border: const Color(0xFF4D0000),
+                      ),
+                    ],
                   ),
-                if (vm.successMessage != null)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    margin: const EdgeInsets.only(bottom: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.green.shade200),
-                    ),
-                    child: Text(
-                      vm.successMessage!,
-                      style: const TextStyle(color: Colors.green),
-                    ),
-                  ),
-                // Stats
-                Row(
-                  children: [
-                    _StatCard('Pending', vm.pendingCount, Colors.orange),
-                    const SizedBox(width: 8),
-                    _StatCard('Approved', vm.approvedCount, Colors.green),
-                    const SizedBox(width: 8),
-                    _StatCard('Rejected', vm.rejectedCount, Colors.red),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                // Filter chips
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: ['all', 'pending', 'approved', 'rejected'].map((
-                      filter,
-                    ) {
-                      final isSelected = vm.statusFilter == filter;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: FilterChip(
-                          label: Text(
-                            filter[0].toUpperCase() + filter.substring(1),
-                          ),
-                          selected: isSelected,
-                          onSelected: (_) => vm.setStatusFilter(filter),
-                          selectedColor: Colors.deepPurple.shade100,
-                          checkmarkColor: Colors.deepPurple,
-                          labelStyle: TextStyle(
-                            color: isSelected
-                                ? Colors.deepPurple
-                                : Colors.grey[700],
-                            fontWeight: isSelected
-                                ? FontWeight.w600
-                                : FontWeight.normal,
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-
-                const SizedBox(height: 12),
-                // Application list
-                Expanded(
-                  child: vm.isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : vm.applications.isEmpty
-                      ? Center(
-                          child: Text(
-                            'No ${vm.statusFilter == 'all' ? '' : vm.statusFilter} applications found.',
-                            style: const TextStyle(color: Colors.grey),
-                          ),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: () => vm.fetchAllApplications(),
-                          child: ListView.separated(
-                            itemCount: vm.applications.length,
-                            separatorBuilder: (_, _) =>
-                                const SizedBox(height: 8),
-                            itemBuilder: (context, index) {
-                              final app = vm.applications[index];
-                              return _ApplicationCard(
-                                app: app,
-                                onApprove: app.applicationStatus == 'pending'
-                                    ? () => vm.approveApplication(app.id!)
-                                    : null,
-                                onReject: app.applicationStatus == 'pending'
-                                    ? () => _confirmReject(context, vm, app)
-                                    : null,
-                                onDelete: () =>
-                                    _confirmDelete(context, vm, app),
-                              );
-                            },
-                          ),
-                        ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        );
-      },
+            // Filter chips
+            Container(
+              color: _kBg,
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: ['all', 'pending', 'approved', 'rejected'].map((f) {
+                    final active = vm.statusFilter == f;
+                    return GestureDetector(
+                      onTap: () => vm.setStatusFilter(f),
+                      child: Container(
+                        margin: const EdgeInsets.only(right: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: active ? const Color(0xFF1a1363) : _kBg,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: active
+                                ? const Color(0xFF1a1363)
+                                : const Color(0xFFE2E8F0),
+                          ),
+                        ),
+                        child: Text(
+                          f[0].toUpperCase() + f.substring(1),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                            color: active
+                                ? Colors.white
+                                : const Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+            // Messages
+            if (vm.errorMessage != null)
+              Container(
+                margin: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEE2E2),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFFCA5A5)),
+                ),
+                child: Text(
+                  vm.errorMessage!,
+                  style: const TextStyle(
+                    color: Color(0xFF991B1B),
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            if (vm.successMessage != null)
+              Container(
+                margin: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD1FAE5),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF6EE7B7)),
+                ),
+                child: Text(
+                  vm.successMessage!,
+                  style: const TextStyle(
+                    color: Color(0xFF065F46),
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            // List
+            Expanded(
+              child: vm.isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : vm.applications.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No ${vm.statusFilter == 'all' ? '' : vm.statusFilter} applications found.',
+                        style: const TextStyle(color: Color(0xFF94A3B8)),
+                      ),
+                    )
+                  : RefreshIndicator(
+                      onRefresh: vm.fetchAllApplications,
+                      child: ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(14, 4, 14, 20),
+                        itemCount: vm.applications.length,
+                        itemBuilder: (ctx, i) {
+                          final app = vm.applications[i];
+                          return _AppCard(
+                            app: app,
+                            onApprove: app.applicationStatus == 'pending'
+                                ? () => vm.approveApplication(app.id!)
+                                : null,
+                            onReject: app.applicationStatus == 'pending'
+                                ? () => _confirmReject(ctx, vm, app)
+                                : null,
+                            onDelete: () => _confirmDelete(ctx, vm, app),
+                          );
+                        },
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -201,14 +229,14 @@ Future<void> _confirmReject(
   AdminViewModel vm,
   ApplicationModel app,
 ) async {
-  final confirmed = await vm.showConfirmationDialog(
+  final ok = await vm.showConfirmationDialog(
     context,
     title: 'Reject Application',
     content: 'Are you sure you want to reject this application?',
     confirmLabel: 'Reject',
-    confirmColor: Colors.red,
+    confirmColor: const Color(0xFF991B1B),
   );
-  if (confirmed) vm.rejectApplication(app.id!);
+  if (ok) vm.rejectApplication(app.id!);
 }
 
 Future<void> _confirmDelete(
@@ -216,208 +244,292 @@ Future<void> _confirmDelete(
   AdminViewModel vm,
   ApplicationModel app,
 ) async {
-  final confirmed = await vm.showConfirmationDialog(
+  final ok = await vm.showConfirmationDialog(
     context,
     title: 'Remove Application',
     content: 'Permanently remove this application?',
     confirmLabel: 'Remove',
-    confirmColor: Colors.red,
+    confirmColor: const Color(0xFF991B1B),
   );
-  if (confirmed) vm.deleteApplication(app.id!);
+  if (ok) vm.deleteApplication(app.id!);
 }
 
-class _ApplicationCard extends StatelessWidget {
+class _AppCard extends StatelessWidget {
   final ApplicationModel app;
   final VoidCallback? onApprove;
   final VoidCallback? onReject;
   final VoidCallback onDelete;
-
-  const _ApplicationCard({
+  const _AppCard({
     required this.app,
-    required this.onApprove,
-    required this.onReject,
+    this.onApprove,
+    this.onReject,
     required this.onDelete,
   });
 
-  Color _statusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'approved':
-        return Colors.green;
-      case 'rejected':
-        return Colors.red;
-      default:
-        return Colors.orange;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final status = app.applicationStatus ?? 'unknown';
-    final color = _statusColor(status);
+    final status = app.applicationStatus.toLowerCase();
+    Color badgeBg, badgeBorder, badgeText, avatarBg, avatarText;
+    if (status == 'approved') {
+      badgeBg = const Color(0xFFD1FAE5);
+      badgeBorder = const Color(0xFF6EE7B7);
+      badgeText = const Color(0xFF065F46);
+      avatarBg = const Color(0xFFD1FAE5);
+      avatarText = const Color(0xFF065F46);
+    } else if (status == 'rejected') {
+      badgeBg = const Color(0xFFFEE2E2);
+      badgeBorder = const Color(0xFFFCA5A5);
+      badgeText = const Color(0xFF991B1B);
+      avatarBg = const Color(0xFFFEE2E2);
+      avatarText = const Color(0xFF991B1B);
+    } else {
+      badgeBg = const Color(0xFFFEF3C7);
+      badgeBorder = const Color(0xFFFCD34D);
+      badgeText = const Color(0xFF92400E);
+      avatarBg = const Color(0xFFEEF2FF);
+      avatarText = const Color(0xFF3730A3);
+    }
+
+    final name = '${app.firstName ?? ''} ${app.surname ?? ''}'.trim();
+    final initials = name.length >= 2
+        ? '${name[0]}${name.split(' ').last.isNotEmpty ? name.split(' ').last[0] : ''}'
+              .toUpperCase()
+        : name.isNotEmpty
+        ? name[0].toUpperCase()
+        : '??';
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha((0.03 * 255).round()),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
+      padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Expanded(
+              // Avatar
+              CircleAvatar(
+                radius: 19,
+                backgroundColor: avatarBg,
                 child: Text(
-                  '${app.firstName ?? ''} ${app.surname ?? ''}'.trim(),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
+                  initials,
+                  style: TextStyle(
+                    color: avatarText,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name.isNotEmpty ? name : 'Unknown',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                    Text(
+                      '${app.studentEmail ?? ''} · Year ${app.yearOfStudy ?? '-'}',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: Color(0xFF94A3B8),
+                      ),
+                    ),
+                  ],
                 ),
+              ),
+              // Badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.15),
+                  color: badgeBg,
                   borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: badgeBorder),
                 ),
                 child: Text(
-                  (app.applicationStatus ?? 'unknown').toUpperCase(),
+                  app.applicationStatus[0].toUpperCase() +
+                      app.applicationStatus.substring(1),
                   style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 11,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: badgeText,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          Text(
-            app.studentEmail ?? '',
-            style: const TextStyle(fontSize: 12, color: Colors.black54),
-          ),
           const SizedBox(height: 8),
           Text(
-            'Year ${app.yearOfStudy ?? '-'}  •  ${app.firstModule ?? '-'}',
-            style: const TextStyle(fontSize: 13),
+            app.firstModule ?? '-',
+            style: const TextStyle(fontSize: 10, color: Color(0xFF64748B)),
           ),
-          if (app.secondModule != null)
-            Text(
-              'Also: ${app.secondModule}',
-              style: const TextStyle(fontSize: 12, color: Colors.black54),
-            ),
-          const SizedBox(height: 4),
-          Text(
-            'Submitted: ${_formatDate(app.createdAt ?? '')}',
-            style: const TextStyle(fontSize: 11, color: Colors.black45),
-          ),
-          if (app.applicationStatus == 'pending') ...[
-            const SizedBox(height: 12),
+          const SizedBox(height: 8),
+          if (status == 'pending') ...[
             Row(
               children: [
                 Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onApprove,
-                    icon: const Icon(Icons.check, size: 16),
-                    label: const Text('Approve'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.green,
-                      side: const BorderSide(color: Colors.green),
+                  child: GestureDetector(
+                    onTap: onApprove,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 7),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD1FAE5),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.check, size: 12, color: Color(0xFF065F46)),
+                          SizedBox(width: 4),
+                          Text(
+                            'Approve',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF065F46),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onReject,
-                    icon: const Icon(Icons.close, size: 16),
-                    label: const Text('Reject'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      side: const BorderSide(color: Colors.red),
+                  child: GestureDetector(
+                    onTap: onReject,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 7),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEE2E2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.close, size: 12, color: Color(0xFF991B1B)),
+                          SizedBox(width: 4),
+                          Text(
+                            'Reject',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF991B1B),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.grey),
-                  onPressed: onDelete,
-                  tooltip: 'Remove',
+                GestureDetector(
+                  onTap: onDelete,
+                  child: Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: const Icon(
+                      Icons.delete_outline,
+                      size: 16,
+                      color: Color(0xFF94A3B8),
+                    ),
+                  ),
                 ),
               ],
             ),
           ] else ...[
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: onDelete,
-                icon: const Icon(
-                  Icons.delete_outline,
-                  size: 16,
-                  color: Colors.grey,
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                GestureDetector(
+                  onTap: onDelete,
+                  child: const Row(
+                    children: [
+                      Icon(
+                        Icons.delete_outline,
+                        size: 14,
+                        color: Color(0xFF94A3B8),
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        'Remove',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF94A3B8),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                label: const Text(
-                  'Remove',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
+              ],
             ),
           ],
         ],
       ),
     );
   }
-
-  String _formatDate(String isoDate) {
-    try {
-      final dt = DateTime.parse(isoDate);
-      return '${dt.day}/${dt.month}/${dt.year}';
-    } catch (_) {
-      return isoDate;
-    }
-  }
 }
 
-class _StatCard extends StatelessWidget {
+class _StatBox extends StatelessWidget {
   final String label;
   final int count;
-  final Color color;
-
-  const _StatCard(this.label, this.count, this.color);
+  final Color textColor, bg, border;
+  const _StatBox({
+    required this.label,
+    required this.count,
+    required this.textColor,
+    required this.bg,
+    required this.border,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
+          color: bg,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
+          border: Border.all(color: border),
         ),
         child: Column(
           children: [
             Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
               '$count',
               style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: color,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: textColor,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w500,
+                color: textColor.withAlpha((0.8 * 255).round()),
               ),
             ),
           ],

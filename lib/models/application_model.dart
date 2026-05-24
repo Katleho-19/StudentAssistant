@@ -1,19 +1,18 @@
 class ApplicationModel {
-  String? id;
-  String? userId;
-  String? firstName;
-  String? surname;
-  String? studentEmail;
-  int? yearOfStudy;
-  String? firstModule;
-  String? secondModule;
-  bool? eligibilityConfirmed;
-  String? photo;
-  String? applicationStatus;
-  String? createdAt;
+  final int? id;
+  final String? userId;
+  final String? firstName;
+  final String? surname;
+  final String? studentEmail;
+  final int? yearOfStudy;
+  final String? firstModule;
+  final String? secondModule;
+  final String? photo;
+  final String applicationStatus;
+  final String? createdAt;
 
   ApplicationModel({
-    this.id,
+    required this.id,
     this.userId,
     this.firstName,
     this.surname,
@@ -21,57 +20,24 @@ class ApplicationModel {
     this.yearOfStudy,
     this.firstModule,
     this.secondModule,
-    this.eligibilityConfirmed,
     this.photo,
-    this.applicationStatus,
+    this.applicationStatus = 'pending',
     this.createdAt,
   });
 
-  static String? _readString(Map<String, dynamic> json, List<String> keys) {
-    for (final key in keys) {
-      final value = json[key];
-      if (value != null) return value.toString();
-    }
-    return null;
-  }
-
   factory ApplicationModel.fromJson(Map<String, dynamic> json) {
     return ApplicationModel(
-      id: _readString(json, ['id']),
-      userId: _readString(json, ['user_id', 'userId']),
-      firstName: _readString(json, ['First Name', 'FirstName', 'firstName']),
-      surname: _readString(json, ['Surname', 'surname']),
-      studentEmail: _readString(json, [
-        'studentEmail',
-        'studentemail',
-        'email',
-        'student_email',
-      ]),
-      yearOfStudy: json['yearOfStudy'] is int
-          ? json['yearOfStudy'] as int
-          : int.tryParse(
-              _readString(json, ['yearOfStudy', 'year_of_study']) ?? '',
-            ),
-      firstModule: _readString(json, [
-        'firstmodule',
-        'firstModule',
-        'First Module',
-      ]),
-      secondModule: _readString(json, [
-        'secondmodule',
-        'secondModule',
-        'Second Module',
-      ]),
-      eligibilityConfirmed:
-          json['eligibility_confirmed'] == true ||
-          _readString(json, ['eligibility_confirmed'])?.toLowerCase() == 'true',
-      photo: _readString(json, ['photo', 'photo_url', 'document_url']),
-      applicationStatus: _readString(json, [
-        'application_status',
-        'status',
-        'applicationStatus',
-      ]),
-      createdAt: _readString(json, ['created_at', 'createdAt']),
+      id: json['id'] as int?,
+      userId: json['user_id']?.toString(),
+      firstName: json['First Name']?.toString(),
+      surname: json['Surname']?.toString(),
+      studentEmail: json['studentEmail']?.toString(),
+      yearOfStudy: json['yearOfStudy'] as int?,
+      firstModule: json['firstmodule']?.toString(),
+      secondModule: json['secondmodule']?.toString(),
+      photo: json['photo']?.toString(),
+      applicationStatus: json['application_status']?.toString() ?? 'pending',
+      createdAt: json['created_at']?.toString(),
     );
   }
 
@@ -85,7 +51,6 @@ class ApplicationModel {
       'yearOfStudy': yearOfStudy,
       'firstmodule': firstModule,
       'secondmodule': secondModule,
-      'eligibility_confirmed': eligibilityConfirmed,
       'photo': photo,
       'application_status': applicationStatus,
       'created_at': createdAt,
@@ -93,7 +58,7 @@ class ApplicationModel {
   }
 
   ApplicationModel copyWith({
-    String? id,
+    int? id,
     String? userId,
     String? firstName,
     String? surname,
@@ -101,7 +66,6 @@ class ApplicationModel {
     int? yearOfStudy,
     String? firstModule,
     String? secondModule,
-    bool? eligibilityConfirmed,
     String? photo,
     String? applicationStatus,
     String? createdAt,
@@ -115,7 +79,6 @@ class ApplicationModel {
       yearOfStudy: yearOfStudy ?? this.yearOfStudy,
       firstModule: firstModule ?? this.firstModule,
       secondModule: secondModule ?? this.secondModule,
-      eligibilityConfirmed: eligibilityConfirmed ?? this.eligibilityConfirmed,
       photo: photo ?? this.photo,
       applicationStatus: applicationStatus ?? this.applicationStatus,
       createdAt: createdAt ?? this.createdAt,

@@ -73,16 +73,15 @@ class AdminViewModel extends ChangeNotifier {
   }
 
   // UPDATE — approve or reject (updates application_status on learner)
-  Future<bool> updateApplicationStatus(String id, String newStatus) async {
+  Future<bool> updateApplicationStatus(int id, String newStatus) async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      final idValue = int.tryParse(id) ?? id;
       await _supabase
           .from('learner')
           .update({'application_status': newStatus})
-          .eq('id', idValue);
+          .eq('id', id);
 
       final index = _applications.indexWhere((a) => a.id == id);
       if (index != -1) {
@@ -111,19 +110,18 @@ class AdminViewModel extends ChangeNotifier {
     }
   }
 
-  Future<bool> approveApplication(String id) =>
+  Future<bool> approveApplication(int id) =>
       updateApplicationStatus(id, 'approved');
 
-  Future<bool> rejectApplication(String id) =>
+  Future<bool> rejectApplication(int id) =>
       updateApplicationStatus(id, 'rejected');
 
   // DELETE — clear application fields on learner
-  Future<bool> deleteApplication(String id) async {
+  Future<bool> deleteApplication(int id) async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      final idValue = int.tryParse(id) ?? id;
       await _supabase
           .from('learner')
           .update({
@@ -133,7 +131,7 @@ class AdminViewModel extends ChangeNotifier {
             'photo': null,
             'application_status': null,
           })
-          .eq('id', idValue);
+          .eq('id', id);
 
       _applications.removeWhere((a) => a.id == id);
       _applyFilter();

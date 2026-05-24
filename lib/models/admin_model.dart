@@ -1,5 +1,6 @@
 //please do not touch!!!
 class Admin {
+  String? userId;
   String? email;
   String? firstName;
   String? surname;
@@ -7,6 +8,7 @@ class Admin {
   String? status;
 
   Admin({
+    this.userId,
     this.email, 
     this.firstName, 
     this.surname, 
@@ -16,6 +18,7 @@ class Admin {
 
   factory Admin.fromJson(Map<String, dynamic> json) {
     return Admin(
+      userId: json['user_id'],
       email: json['AdminEmail'],
       firstName: json['FirstName'],
       surname: json['Surname'],
@@ -26,6 +29,7 @@ class Admin {
 
   Map<String, dynamic> toJson() {
     return {
+      'user_id': userId,
       'AdminEmail': email,
       'FirstName': firstName,
       'Surname': surname,

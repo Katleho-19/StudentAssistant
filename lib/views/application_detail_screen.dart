@@ -4,11 +4,12 @@ import 'package:student_assistant/models/application_model.dart';
 import 'package:student_assistant/viewmodels/student_view_model.dart';
 import 'package:student_assistant/routes/route_manager.dart';
 
+const _kPrimary = Color(0xFF1a1363);
+const _kBg = Color(0xFFF1F5F9);
+
 class ApplicationDetailScreen extends StatefulWidget {
   final ApplicationModel application;
-
   const ApplicationDetailScreen({super.key, required this.application});
-
   @override
   State<ApplicationDetailScreen> createState() =>
       _ApplicationDetailScreenState();
@@ -17,70 +18,52 @@ class ApplicationDetailScreen extends StatefulWidget {
 class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
   bool _isDeleting = false;
 
-  Color _statusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'approved':
-        return Colors.green;
-      case 'rejected':
-        return Colors.red;
-      default:
-        return Colors.orange;
-    }
-  }
-
-  IconData _statusIcon(String status) {
-    switch (status.toLowerCase()) {
-      case 'approved':
-        return Icons.check_circle;
-      case 'rejected':
-        return Icons.cancel;
-      default:
-        return Icons.hourglass_top;
-    }
-  }
-
   Future<void> _deleteApplication() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('Delete Application'),
         content: const Text(
           'Are you sure you want to delete your application? This cannot be undone.',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF991B1B),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
     );
-
-    if (confirmed != true) return;
-    setState(() => _isDeleting = true);
-
+    if (!mounted) return;
+    if (confirmed != true) {
+      return;
+    }
+    setState(() {
+      _isDeleting = true;
+    });
     try {
       final userId = widget.application.userId;
       if (userId == null) return;
-
       final vm = context.read<StudentViewModel>();
       await vm.deleteApplication(userId);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Application deleted successfully.'),
-            backgroundColor: Colors.green,
+            content: Text('Application deleted.'),
+            backgroundColor: Color(0xFF065F46),
           ),
         );
         Navigator.pushNamedAndRemoveUntil(
           context,
           RouteManager.studHome,
-          (route) => false,
+          (r) => false,
         );
       }
     } catch (e) {
@@ -93,335 +76,424 @@ class _ApplicationDetailScreenState extends State<ApplicationDetailScreen> {
         );
       }
     } finally {
-      if (mounted) setState(() => _isDeleting = false);
+      if (mounted) {
+        setState(() => _isDeleting = false);
+      }
     }
-  }
-
-  void _editApplication() {
-    Navigator.pushNamed(
-      context,
-      RouteManager.editApplication,
-      arguments: widget.application,
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     final app = widget.application;
-    final status = app.applicationStatus?.toLowerCase() ?? 'unknown';
-    final prettyStatus = status.isNotEmpty
-        ? '${status[0].toUpperCase()}${status.substring(1)}'
-        : 'Unknown';
+    final status = app.applicationStatus.toLowerCase();
     final isPending = status == 'pending';
 
+    Color statusBg, statusBorder, statusTextColor;
+    IconData statusIcon;
+    String statusLabel, statusDesc;
+    if (status == 'approved') {
+      statusBg = const Color(0xFFD1FAE5);
+      statusBorder = const Color(0xFF6EE7B7);
+      statusTextColor = const Color(0xFF065F46);
+      statusIcon = Icons.check_circle_outline;
+      statusLabel = 'approved';
+      statusDesc = 'Your application has been approved. Congratulations!';
+    } else if (status == 'rejected') {
+      statusBg = const Color(0xFFFEE2E2);
+      statusBorder = const Color(0xFFFCA5A5);
+      statusTextColor = const Color(0xFF991B1B);
+      statusIcon = Icons.cancel_outlined;
+      statusLabel = 'rejected';
+      statusDesc = 'Your application was not successful.';
+    } else {
+      statusBg = const Color(0xFFFEF3C7);
+      statusBorder = const Color(0xFFFCD34D);
+      statusTextColor = const Color(0xFF92400E);
+      statusIcon = Icons.access_time_outlined;
+      statusLabel = 'pending';
+      statusDesc = 'Your application is under review. We will notify you soon.';
+    }
+
+    final name = '${app.firstName ?? ''} ${app.surname ?? ''}'.trim();
+    final initials = name.length >= 2
+        ? '${name[0]}${name.split(' ').last.isNotEmpty ? name.split(' ').last[0] : ''}'
+              .toUpperCase()
+        : name.isNotEmpty
+        ? name[0].toUpperCase()
+        : 'ST';
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Application Details'),
-        backgroundColor: Colors.indigo,
-        foregroundColor: Colors.white,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Status banner
-            Card(
-              color: _statusColor(status).withValues(alpha: 0.12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: _statusColor(status), width: 1.5),
+      backgroundColor: _kBg,
+      body: Column(
+        children: [
+          // Header
+          Container(
+            width: double.infinity,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [Color(0xFF1a1363), Color(0xFF2d2a9e)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
+            ),
+            padding: const EdgeInsets.fromLTRB(16, 52, 16, 20),
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: const Icon(
+                    Icons.chevron_left,
+                    color: Colors.white,
+                    size: 26,
+                  ),
                 ),
-                child: Row(
+                const SizedBox(width: 4),
+                const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      _statusIcon(status),
-                      color: _statusColor(status),
-                      size: 28,
+                    Text(
+                      'My Application',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    const SizedBox(width: 12),
-                    Column(
+                    Text(
+                      'Student Assistant Programme',
+                      style: TextStyle(color: Color(0x8CFFFFFF), fontSize: 10),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                children: [
+                  // Profile + status card
+                  _card(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 23,
+                              backgroundColor: const Color(0xFFEEF2FF),
+                              child: Text(
+                                initials,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: _kPrimary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  name.isNotEmpty ? name : 'Student',
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF0F172A),
+                                  ),
+                                ),
+                                Text(
+                                  app.studentEmail ?? '',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Color(0xFF94A3B8),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        const Divider(color: Color(0xFFE2E8F0), height: 1),
+                        const SizedBox(height: 14),
+                        // Status
+                        Container(
+                          decoration: BoxDecoration(
+                            color: statusBg,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: statusBorder),
+                          ),
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                statusIcon,
+                                color: statusTextColor,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      statusLabel,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w700,
+                                        color: statusTextColor,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      statusDesc,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: statusTextColor.withAlpha(
+                                          (0.8 * 255).round(),
+                                        ),
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  // Details card
+                  _card(
+                    child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Application Status',
-                          style: TextStyle(fontSize: 12, color: Colors.black54),
-                        ),
-                        Text(
-                          prettyStatus,
+                          'APPLICATION DETAILS',
                           style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: _statusColor(status),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1,
+                            color: Color(0xFF94A3B8),
                           ),
+                        ),
+                        const SizedBox(height: 10),
+                        _detailRow(
+                          icon: Icons.calendar_today_outlined,
+                          label: 'Year of Study',
+                          value: app.yearOfStudy != null
+                              ? 'Year ${app.yearOfStudy}'
+                              : '-',
+                        ),
+                        _detailRow(
+                          icon: Icons.menu_book_outlined,
+                          label: 'First Module',
+                          value: app.firstModule ?? '-',
+                        ),
+                        _detailRow(
+                          icon: Icons.check_circle_outline,
+                          label: 'Eligibility',
+                          value: 'Confirmed',
+                          valueColor: const Color(0xFF065F46),
+                        ),
+                        _detailRow(
+                          icon: Icons.attach_file,
+                          label: 'Document',
+                          value: app.photo != null
+                              ? 'Uploaded'
+                              : 'Not uploaded',
+                          valueColor: app.photo != null
+                              ? const Color(0xFF065F46)
+                              : const Color(0xFF94A3B8),
+                          isLast: true,
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Application info card
-            Card(
-              color: Colors.blue.shade50,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Application Information',
-                      style: Theme.of(
-                        context,
-                      ).textTheme.headlineSmall?.copyWith(color: Colors.indigo),
-                    ),
-                    const Divider(height: 24),
-                    _DetailRow(
-                      icon: Icons.person,
-                      label: 'Student',
-                      value: '${app.firstName ?? ''} ${app.surname ?? ''}'
-                          .trim(),
-                    ),
-                    const SizedBox(height: 12),
-                    _DetailRow(
-                      icon: Icons.email,
-                      label: 'Email',
-                      value: app.studentEmail ?? '-',
-                    ),
-                    const SizedBox(height: 12),
-                    _DetailRow(
-                      icon: Icons.school,
-                      label: 'Year of Study',
-                      value: app.yearOfStudy != null
-                          ? 'Year ${app.yearOfStudy}'
-                          : '-',
-                    ),
-                    const SizedBox(height: 12),
-                    _DetailRow(
-                      icon: Icons.book,
-                      label: 'First Course',
-                      value: app.firstModule ?? '-',
-                    ),
-                    const SizedBox(height: 12),
-                    _DetailRow(
-                      icon: Icons.book_outlined,
-                      label: 'Second Course',
-                      value: app.secondModule ?? 'Not selected',
-                      valueColor: app.secondModule == null
-                          ? Colors.grey
-                          : Colors.black87,
-                    ),
-                    const SizedBox(height: 12),
-                    _DetailRow(
-                      icon: Icons.calendar_today,
-                      label: 'Submitted',
-                      value: _formatDate(app.createdAt ?? ''),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Document card
-            Card(
-              color: Colors.blue.shade50,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Supporting Document',
-                      style: Theme.of(
-                        context,
-                      ).textTheme.headlineSmall?.copyWith(color: Colors.indigo),
-                    ),
-                    const Divider(height: 24),
+                  ),
+                  const SizedBox(height: 12),
+                  // Actions
+                  if (isPending) ...[
                     Row(
                       children: [
-                        Icon(
-                          app.photo != null
-                              ? Icons.picture_as_pdf
-                              : Icons.error_outline,
-                          color: app.photo != null
-                              ? Colors.red.shade700
-                              : Colors.grey,
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => Navigator.pushNamed(
+                              context,
+                              RouteManager.editApplication,
+                              arguments: widget.application,
+                            ),
+                            icon: const Icon(Icons.edit_outlined, size: 15),
+                            label: const Text('Edit'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: _kPrimary,
+                              side: const BorderSide(
+                                color: _kPrimary,
+                                width: 1.5,
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          app.photo != null
-                              ? 'Document uploaded'
-                              : 'No document uploaded',
-                          style: TextStyle(
-                            color: app.photo != null
-                                ? Colors.black87
-                                : Colors.grey,
+                        const SizedBox(width: 10),
+                        ElevatedButton.icon(
+                          onPressed: _isDeleting ? null : _deleteApplication,
+                          icon: _isDeleting
+                              ? const SizedBox(
+                                  width: 15,
+                                  height: 15,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.delete_outline,
+                                  color: Colors.white,
+                                  size: 15,
+                                ),
+                          label: Text(
+                            _isDeleting ? 'Deleting...' : 'Delete',
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF991B1B),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 12,
+                              horizontal: 20,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 0,
                           ),
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Action buttons
-            if (isPending) ...[
-              const Text(
-                'Manage Application',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.black54,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _editApplication,
-                      icon: const Icon(Icons.edit),
-                      label: const Text('Edit'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.indigo,
-                        side: const BorderSide(color: Colors.indigo),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                  ] else if (status == 'rejected') ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _isDeleting ? null : _deleteApplication,
+                        icon: const Icon(
+                          Icons.refresh,
+                          color: Colors.white,
+                          size: 16,
+                        ),
+                        label: const Text(
+                          'Delete & Reapply',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _kPrimary,
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _isDeleting ? null : _deleteApplication,
-                      icon: _isDeleting
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                color: Colors.white,
-                                strokeWidth: 2,
+                  ] else ...[
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      padding: const EdgeInsets.all(12),
+                      child: const Row(
+                        children: [
+                          Icon(
+                            Icons.lock_outline,
+                            color: Colors.grey,
+                            size: 18,
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'This application has been reviewed and can no longer be edited.',
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontSize: 12,
                               ),
-                            )
-                          : const Icon(Icons.delete, color: Colors.white),
-                      label: Text(
-                        _isDeleting ? 'Deleting...' : 'Delete',
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
+                  ],
+                  const SizedBox(height: 24),
                 ],
               ),
-            ] else ...[
-              Card(
-                color: Colors.grey.shade100,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Padding(
-                  padding: EdgeInsets.all(12.0),
-                  child: Row(
-                    children: [
-                      Icon(Icons.lock_outline, color: Colors.grey),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'This application has been reviewed and can no longer be edited or deleted.',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 24),
-          ],
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  String _formatDate(String isoDate) {
-    try {
-      final dt = DateTime.parse(isoDate);
-      return '${dt.day}/${dt.month}/${dt.year}  ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    } catch (_) {
-      return isoDate;
-    }
-  }
-}
-
-class _DetailRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color? valueColor;
-
-  const _DetailRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    this.valueColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 20, color: Colors.indigo),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(fontSize: 12, color: Colors.black54),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: valueColor ?? Colors.black87,
-                ),
-              ),
-            ],
+  Widget _card({required Widget child}) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha((0.04 * 255).round()),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
-        ),
-      ],
+        ],
+      ),
+      padding: const EdgeInsets.all(16),
+      child: child,
+    );
+  }
+
+  Widget _detailRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    Color? valueColor,
+    bool isLast = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 9),
+      decoration: BoxDecoration(
+        border: isLast
+            ? null
+            : const Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 13, color: const Color(0xFF94A3B8)),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: valueColor ?? const Color(0xFF0F172A),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

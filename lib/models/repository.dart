@@ -1,16 +1,15 @@
+import 'dart:io';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter/foundation.dart';
 import 'package:student_assistant/models/application_model.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class Repository {
   final SupabaseClient _supabase = Supabase.instance.client;
   final String bucketName = 'student-bucket';
-  String? lastError;
 
   // ── LEARNERS ──────────────────────────────────────────────────────────────
 
-  // READ — fetch current student's record from learner table
+  // READ — fetch current student's record from Learners
   Future<ApplicationModel?> fetchMyApplication() async {
     try {
       final userId = _supabase.auth.currentUser?.id;
@@ -23,36 +22,8 @@ class Repository {
           .maybeSingle();
 
       if (response == null) return null;
-
-      final app = ApplicationModel.fromJson(response);
-      if (app.firstModule == null &&
-          app.applicationStatus == null &&
-          app.photo == null) {
-        return null;
-      }
-
-      return app;
+      return ApplicationModel.fromJson(response);
     } catch (e) {
-      debugPrint('fetchMyApplication error: $e');
-      return null;
-    }
-  }
-
-  // READ — fetch student profile (name/email) even before application submitted
-  Future<Map<String, dynamic>?> fetchStudentProfile() async {
-    try {
-      final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return null;
-
-      final response = await _supabase
-          .from('learner')
-          .select('First Name, Surname, studentEmail')
-          .eq('user_id', userId)
-          .maybeSingle();
-
-      return response;
-    } catch (e) {
-      debugPrint('fetchStudentProfile error: $e');
       return null;
     }
   }
@@ -63,20 +34,13 @@ class Repository {
       final response = await _supabase
           .from('learner')
           .select()
+          .not('firstmodule', 'is', null)
           .order('created_at', ascending: false);
 
       return (response as List)
           .map((e) => ApplicationModel.fromJson(e))
-          .where(
-            (app) =>
-                app.firstModule != null ||
-                app.secondModule != null ||
-                app.applicationStatus != null ||
-                app.photo != null,
-          )
           .toList();
     } catch (e) {
-      debugPrint('fetchAllApplications error: $e');
       return [];
     }
   }
@@ -86,20 +50,16 @@ class Repository {
     try {
       final response = await _supabase
           .from('learner')
-          .select('firstmodule, application_status, photo')
+          .select()
           .eq('user_id', userId)
           .maybeSingle();
-      if (response == null) return false;
-      return response['firstmodule'] != null ||
-          response['application_status'] != null ||
-          response['photo'] != null;
+      return response != null && response['firstmodule'] != null;
     } catch (e) {
-      debugPrint('studentHasApplication error: $e');
       return false;
     }
   }
 
-  // CREATE — insert new student application into learner table
+  // CREATE — insert new student application into Learners
   Future<bool> createApplication({
     required String userId,
     required String firstName,
@@ -110,15 +70,31 @@ class Repository {
     String? secondModule,
     String? photoUrl,
   }) async {
-    lastError = null;
-    try {
-      final existing = await _supabase
-          .from('learner')
-          .select('user_id')
-          .eq('user_id', userId)
-          .maybeSingle();
+    // The learner row already exists (created at registration).
+    // We UPDATE the application fields on that row instead of inserting a new one.
+    // This avoids needing a unique constraint for upsert.
+    final existing = await _supabase
+        .from('learner')
+        .select('user_id')
+        .eq('user_id', userId)
+        .maybeSingle();
 
-      final payload = {
+    if (existing != null) {
+      await _supabase
+          .from('learner')
+          .update({
+            'First Name': firstName,
+            'Surname': surname,
+            'studentEmail': studentEmail,
+            'yearOfStudy': yearOfStudy,
+            'firstmodule': firstModule,
+            'secondmodule': secondModule,
+            'photo': photoUrl,
+            'application_status': 'pending',
+          })
+          .eq('user_id', userId);
+    } else {
+      await _supabase.from('learner').insert({
         'user_id': userId,
         'First Name': firstName,
         'Surname': surname,
@@ -128,24 +104,9 @@ class Repository {
         'secondmodule': secondModule,
         'photo': photoUrl,
         'application_status': 'pending',
-      };
-
-      if (existing == null) {
-        await _supabase.from('learner').insert(payload);
-      } else {
-        await _supabase.from('learner').update(payload).eq('user_id', userId);
-      }
-
-      return true;
-    } on PostgrestException catch (e) {
-      lastError = e.message;
-      debugPrint('createApplication error: ${e.message}');
-      return false;
-    } catch (e) {
-      lastError = e.toString();
-      debugPrint('createApplication error: $e');
-      return false;
+      });
     }
+    return true;
   }
 
   // UPDATE — edit pending application fields
@@ -156,7 +117,6 @@ class Repository {
     String? secondModule,
     String? photoUrl,
   }) async {
-    lastError = null;
     try {
       final Map<String, dynamic> updates = {};
       if (yearOfStudy != null) updates['yearOfStudy'] = yearOfStudy;
@@ -166,18 +126,12 @@ class Repository {
 
       await _supabase.from('learner').update(updates).eq('user_id', userId);
       return true;
-    } on PostgrestException catch (e) {
-      lastError = e.message;
-      debugPrint('updateApplication error: ${e.message}');
-      return false;
     } catch (e) {
-      lastError = e.toString();
-      debugPrint('updateApplication error: $e');
       return false;
     }
   }
 
-  // UPDATE — admin approves or rejects
+  // UPDATE — admin approves or rejects (updates application_status on Learners)
   Future<bool> updateApplicationStatus({
     required String userId,
     required String newStatus,
@@ -189,7 +143,6 @@ class Repository {
           .eq('user_id', userId);
       return true;
     } catch (e) {
-      debugPrint('updateApplicationStatus error: $e');
       return false;
     }
   }
@@ -197,77 +150,39 @@ class Repository {
   // DELETE — clear application fields (keeps student profile)
   Future<bool> deleteApplication(String userId) async {
     try {
-      await _supabase
-          .from('learner')
-          .update({
-            'yearOfStudy': null,
-            'firstmodule': null,
-            'secondmodule': null,
-            'photo': null,
-            'application_status': null,
-          })
-          .eq('user_id', userId);
+      await _supabase.from('learner').delete().eq('user_id', userId);
       return true;
     } catch (e) {
-      debugPrint('deleteApplication error: $e');
       return false;
     }
   }
 
   // ── DOCUMENT STORAGE ──────────────────────────────────────────────────────
 
-  // Pick file — returns bytes + filename (works on Web, Android, iOS, Desktop)
-  Future<Map<String, dynamic>?> pickStudentDocs() async {
-    try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
-        withData: true, // Forces bytes into memory — required for web
-      );
-
-      if (result == null || result.files.isEmpty) return null;
-
-      final file = result.files.single;
-      final bytes = file.bytes;
-      if (bytes == null) return null;
-
-      return {'bytes': bytes, 'name': file.name};
-    } catch (e) {
-      debugPrint('pickStudentDocs error: $e');
-      return null;
+  // Pick PDF from device
+  Future<File?> pickStudentDocs() async {
+    FilePickerResult? result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
+    );
+    if (result != null && result.files.single.path != null) {
+      return File(result.files.single.path!);
     }
+    return null;
   }
 
-  // Upload document bytes and return public URL
-  Future<String?> uploadStudentDocs(
-    String userId,
-    Uint8List bytes,
-    String fileName,
-  ) async {
-    lastError = null;
-    try {
-      final ext = fileName.contains('.') ? fileName.split('.').last : 'pdf';
-      final storageName = '${DateTime.now().millisecondsSinceEpoch}.$ext';
-      final path = '$userId/$storageName';
+  // Upload document and return public URL
+  Future<String?> uploadStudentDocs(String userId, File file) async {
+    final ext = file.path.split('.').last.toLowerCase();
+    final fileName = '${DateTime.now().millisecondsSinceEpoch}.$ext';
+    final path = '$userId/$fileName';
 
-      await _supabase.storage
-          .from(bucketName)
-          .uploadBinary(
-            path,
-            bytes,
-            fileOptions: const FileOptions(upsert: true),
-          );
+    // Let exceptions propagate so the caller can surface the real error.
+    await _supabase.storage
+        .from(bucketName)
+        .upload(path, file, fileOptions: const FileOptions(upsert: true));
 
-      return _supabase.storage.from(bucketName).getPublicUrl(path);
-    } on PostgrestException catch (e) {
-      lastError = e.message;
-      debugPrint('uploadStudentDocs error: ${e.message}');
-      return null;
-    } catch (e) {
-      lastError = e.toString();
-      debugPrint('uploadStudentDocs error: $e');
-      return null;
-    }
+    return _supabase.storage.from(bucketName).getPublicUrl(path);
   }
 
   // Delete document from storage
@@ -275,7 +190,7 @@ class Repository {
     try {
       await _supabase.storage.from(bucketName).remove([filePath]);
     } catch (e) {
-      debugPrint('deleteStudentDocs error: $e');
+      return;
     }
   }
 }

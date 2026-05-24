@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/application_model.dart';
@@ -26,7 +27,7 @@ class StudentViewModel extends ChangeNotifier {
   int? _yearOfStudy;
   String? _firstModule;
   String? _secondModule;
-  Map<String, dynamic>? _supportingDocument;
+  File? _supportingDocument;
   bool _eligibilityConfirmed = false;
 
   // Status
@@ -37,7 +38,7 @@ class StudentViewModel extends ChangeNotifier {
   int? get yearOfStudy => _yearOfStudy;
   String? get module1 => _firstModule;
   String? get module2 => _secondModule;
-  Map<String, dynamic>? get supportingDocument => _supportingDocument;
+  File? get supportingDocument => _supportingDocument;
   bool get eligibilityConfirmed => _eligibilityConfirmed;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -58,7 +59,7 @@ class StudentViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setSupportingDocument(Map<String, dynamic>? file) {
+  void setSupportingDocument(File? file) {
     _supportingDocument = file;
     notifyListeners();
   }
@@ -70,7 +71,9 @@ class StudentViewModel extends ChangeNotifier {
 
   // Validation
   String? validateYearOfStudy(int? year) {
-    if (year == null) return 'Please select your year of study.';
+    if (year == null) {
+      return 'Please select your year of study.';
+    }
     return null;
   }
 
@@ -82,7 +85,9 @@ class StudentViewModel extends ChangeNotifier {
   }
 
   String? validateEligibility(bool? confirmed) {
-    if (confirmed == null || !confirmed) return 'You must confirm eligibility.';
+    if (confirmed == null || !confirmed) {
+      return 'You must confirm eligibility.';
+    }
     return null;
   }
 
@@ -200,8 +205,7 @@ class StudentViewModel extends ChangeNotifier {
         try {
           photoUrl = await _repository.uploadStudentDocs(
             user.id,
-            _supportingDocument!['bytes'],
-            _supportingDocument!['name'],
+            _supportingDocument!,
           );
         } catch (uploadError) {
           // Surface the real Supabase error. Common causes: bucket 'student-bucket'
@@ -256,8 +260,7 @@ class StudentViewModel extends ChangeNotifier {
       if (_supportingDocument != null) {
         photoUrl = await _repository.uploadStudentDocs(
           userId,
-          _supportingDocument!['bytes'],
-          _supportingDocument!['name'],
+          _supportingDocument!,
         );
       }
 

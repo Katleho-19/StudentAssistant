@@ -5,21 +5,44 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
+  Future<String> _resolveRoute(String userId, String? email) async {
+    final client = Supabase.instance.client;
+
+    final admin = await client
+        .from('admin')
+        .select('user_id')
+        .eq('user_id', userId)
+        .maybeSingle();
+    if (admin != null) return RouteManager.adminHome;
+
+    final learner = await client
+        .from('learner')
+        .select('user_id')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+    if (learner != null) return RouteManager.studHome;
+
+    // New user — create learner profile row once
+    await client.from('learner').insert({
+      'user_id': userId,
+      'studentEmail': email,
+    });
+    return RouteManager.studHome;
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder(
       stream: Supabase.instance.client.auth.onAuthStateChange,
-
       builder: (context, snapshot) {
-        //loading
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        //check current session
-        final session = snapshot.data?.session;
 
+        final session = snapshot.data?.session;
         if (session == null) {
           WidgetsBinding.instance.addPostFrameCallback(
             (_) => Navigator.pushReplacementNamed(context, RouteManager.login),
@@ -29,79 +52,24 @@ class AuthGate extends StatelessWidget {
           );
         }
 
-        //Check if user exists in admin table
-        return FutureBuilder<Map<String, dynamic>?>(
-          future: Supabase.instance.client
-              .from('admin')
-              .select()
-              .eq('user_id', session.user.id)
-              .maybeSingle(),
-          builder: (context, adminSnapShot) {
-            if (adminSnapShot.connectionState == ConnectionState.waiting) {
+        return FutureBuilder<String>(
+          future: _resolveRoute(session.user.id, session.user.email),
+          builder: (context, routeSnapshot) {
+            if (routeSnapshot.connectionState == ConnectionState.waiting) {
               return const Scaffold(
                 body: Center(child: CircularProgressIndicator()),
               );
             }
-            //if found in admin table
-            if (adminSnapShot.data != null) {
+            if (routeSnapshot.hasData) {
               WidgetsBinding.instance.addPostFrameCallback(
                 (_) => Navigator.pushReplacementNamed(
                   context,
-                  RouteManager.adminHome,
+                  routeSnapshot.data!,
                 ),
               );
-              return const Scaffold(
-                body: Center(child: CircularProgressIndicator()),
-              );
             }
-
-            //otherwise
-            return FutureBuilder(
-              future: Supabase.instance.client
-                  .from('learner')
-                  .select()
-                  .eq('user_id', session.user.id)
-                  .maybeSingle(),
-              builder: (context, learnerSnapShot) {
-                if (learnerSnapShot.connectionState ==
-                    ConnectionState.waiting) {
-                  return const Scaffold(
-                    body: Center(child: CircularProgressIndicator()),
-                  );
-                }
-
-                //if learner profile exists
-                if (learnerSnapShot.data != null) {
-                  WidgetsBinding.instance.addPostFrameCallback(
-                    (_) => Navigator.pushReplacementNamed(
-                      context,
-                      RouteManager.studHome,
-                    ),
-                  );
-                  return const Scaffold(
-                    body: Center(child: CircularProgressIndicator()),
-                  );
-                }
-
-                //new user( create learner profile then go to student home )
-                return FutureBuilder(
-                  future: Supabase.instance.client.from('learner').insert({
-                    'user_id': session.user.id,
-                    'studentEmail': session.user.email,
-                  }),
-                  builder: (context, _) {
-                    WidgetsBinding.instance.addPostFrameCallback(
-                      (_) => Navigator.pushReplacementNamed(
-                        context,
-                        RouteManager.studHome,
-                      ),
-                    );
-                    return const Scaffold(
-                      body: Center(child: CircularProgressIndicator()),
-                    );
-                  },
-                );
-              },
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
             );
           },
         );
@@ -109,4 +77,3 @@ class AuthGate extends StatelessWidget {
     );
   }
 }
-
